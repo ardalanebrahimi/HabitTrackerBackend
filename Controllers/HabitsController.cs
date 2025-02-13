@@ -18,121 +18,95 @@ public class HabitsController : ControllerBase
     private Guid GetUserId()
     {
         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-        if (string.IsNullOrEmpty(userIdClaim))
+        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out Guid userId))
         {
-            throw new UnauthorizedAccessException("User ID not found in token.");
+            throw new UnauthorizedAccessException("Invalid or missing User ID.");
         }
-
-        if (!Guid.TryParse(userIdClaim, out Guid userId))
-        {
-            throw new UnauthorizedAccessException("Invalid User ID format in token.");
-        }
-
         return userId;
     }
 
-    // ✅ Get all habits for the logged-in user only
-    [HttpGet]
-    public async Task<ActionResult<IEnumerable<Habit>>> GetHabits()
-    {
-        var userId = GetUserId();
-        return await _context.Habits.Where(h => h.UserId == userId).ToListAsync();
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> AddHabit([FromBody] Habit habit)
-    {
-        if (habit == null)
-        {
-            return BadRequest("Habit data is missing.");
-        }
-
-        if (string.IsNullOrEmpty(habit.Name) || string.IsNullOrEmpty(habit.Frequency) || string.IsNullOrEmpty(habit.GoalType))
-        {
-            return BadRequest("All required fields must be provided.");
-        }
-
-        var userId = GetUserId(); // ✅ Ensure habit is linked to the current user
-        habit.UserId = userId;
-
-        //if (habit.Id == Guid.Empty) // 🛑 Ensure a new Guid is assigned if it's missing
-        //{
-        //    habit.Id = Guid.NewGuid();
-        //}
-
-        _context.Habits.Add(habit);
-        await _context.SaveChangesAsync();
-
-        return CreatedAtAction(nameof(GetHabits), new { id = habit.Id }, habit);
-    }
-
-
-    // ✅ Update a habit (Only if it belongs to the logged-in user)
-    [HttpPut("{id}")]
-    public async Task<IActionResult> UpdateHabit(Guid id, Habit habit)
-    {
-        var userId = GetUserId();
-        var existingHabit = await _context.Habits.FindAsync(id);
-
-        if (existingHabit == null || existingHabit.UserId != userId)
-            return Unauthorized("You do not have permission to edit this habit.");
-
-        existingHabit.Name = habit.Name;
-        existingHabit.Frequency = habit.Frequency;
-        existingHabit.GoalType = habit.GoalType;
-        existingHabit.TargetValue = habit.TargetValue;
-        existingHabit.CurrentValue = habit.CurrentValue;
-        existingHabit.Streak = habit.Streak;
-
-        await _context.SaveChangesAsync();
-        return NoContent();
-    }
-
-    // ✅ Delete a habit (Only if it belongs to the logged-in user)
-    [HttpDelete("{id}")]
-    public async Task<IActionResult> DeleteHabit(Guid id)
-    {
-        var userId = GetUserId();
-        var habit = await _context.Habits.FindAsync(id);
-
-        if (habit == null || habit.UserId != userId)
-            return Unauthorized("You do not have permission to delete this habit.");
-
-        _context.Habits.Remove(habit);
-        await _context.SaveChangesAsync();
-        return NoContent();
-    }
-
-    // 2️⃣ Get Today's Habits
+    // ✅ Get today's habits including progress
     [HttpGet("today")]
     public async Task<ActionResult<IEnumerable<Habit>>> GetTodayHabits()
     {
         var userId = GetUserId();
         var today = DateTime.UtcNow.Date;
+
         var habits = await _context.Habits
             .Include(h => h.Logs)
             .Where(h => h.UserId == userId)
-            .Where(h => h.Frequency == "daily" || 
-                        (h.Frequency == "weekly" && today.DayOfWeek == DayOfWeek.Monday) || 
-                        (h.Frequency == "monthly" && today.Day == 1))
             .ToListAsync();
-        return habits;
+
+        var filteredHabits = habits.Where(h =>
+            h.Frequency == "daily" ||
+            (h.Frequency == "weekly" && today >= GetStartOfWeek() && !HasMetWeeklyGoal(h)) ||
+            (h.Frequency == "monthly" && today >= GetStartOfMonth() && !HasMetMonthlyGoal(h))
+        ).ToList();
+
+        return filteredHabits;
     }
 
-
-    // 6️⃣ Mark Habit as Completed
-    [HttpPost("{id}/complete")]
-    public async Task<IActionResult> CompleteHabit(Guid id)
+    private DateTime GetStartOfWeek()
     {
-        var habit = await _context.Habits.Include(h => h.Logs).FirstOrDefaultAsync(h => h.Id == id);
-        if (habit == null) return NotFound();
+        var today = DateTime.UtcNow.Date;
+        return today.AddDays(-(int)today.DayOfWeek + (int)DayOfWeek.Monday);
+    }
+
+    private DateTime GetStartOfMonth()
+    {
+        return new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
+    }
+
+    private bool HasMetWeeklyGoal(Habit habit)
+    {
+        var startOfWeek = GetStartOfWeek();
+        return habit.Logs.Any(log => log.Date >= startOfWeek);
+    }
+
+    private bool HasMetMonthlyGoal(Habit habit)
+    {
+        var startOfMonth = GetStartOfMonth();
+        return habit.Logs.Any(log => log.Date >= startOfMonth);
+    }
+
+    // ✅ Mark Habit as Completed (+1) or Decrease Progress (-1)
+    [HttpPost("{id}/complete")]
+    public async Task<IActionResult> CompleteHabit(Guid id, [FromBody] bool decrease = false)
+    {
+        var userId = GetUserId();
+        var habit = await _context.Habits.Include(h => h.Logs).FirstOrDefaultAsync(h => h.Id == id && h.UserId == userId);
+        if (habit == null) return NotFound("Habit not found.");
 
         var today = DateTime.UtcNow.Date;
-        if (!habit.Logs.Any(l => l.Date == today))
+        var existingLog = habit.Logs.FirstOrDefault(l => l.Date == today);
+
+        if (!decrease)
         {
-            habit.Logs.Add(new HabitLog { Id = Guid.NewGuid(), HabitId = id, Date = today, Value = 1 });
-            habit.Streak++;
+            if (existingLog == null)
+            {
+                habit.Logs.Add(new HabitLog
+                {
+                    Id = Guid.NewGuid(),
+                    HabitId = id,
+                    Date = today,
+                    Value = 1
+                });
+            }
+            else
+            {
+                existingLog.Value++; // Only increase by 1 per call
+            }
+        }
+        else
+        {
+            if (existingLog != null && existingLog.Value > 0)
+            {
+                existingLog.Value--; // Decrease progress by 1
+                if (existingLog.Value == 0)
+                {
+                    _context.HabitLogs.Remove(existingLog); // Remove log if value reaches 0
+                }
+            }
         }
 
         await _context.SaveChangesAsync();
