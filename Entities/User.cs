@@ -18,4 +18,6 @@ public class User : IdentityUser<Guid>
 
     [Column("name")]
     public string UserName { get; set; }
+    public string RefreshToken { get; set; }
+    public DateTime RefreshTokenExpiryTime { get; set; }
 }
