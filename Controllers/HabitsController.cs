@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
 [Authorize]
@@ -23,6 +24,18 @@ public class HabitsController : ControllerBase
         }
         return userId;
     }
+
+    [HttpPost]
+    public async Task<IActionResult> AddHabit([FromBody] CreateHabitDTO habitDto)
+    {
+        var userId = GetUserId(); // Get user ID from JWT token
+
+        var newHabit = await _habitService.AddHabit(userId, habitDto); // ✅ Call service
+
+        return CreatedAtAction(nameof(GetTodayHabits), new { id = newHabit.Id }, newHabit);
+    }
+
+
 
     [HttpGet("today")]
     public async Task<ActionResult<IEnumerable<HabitWithProgressDTO>>> GetTodayHabits()

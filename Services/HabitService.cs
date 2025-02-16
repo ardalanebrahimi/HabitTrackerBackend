@@ -10,6 +10,43 @@ public class HabitService
         _context = context;
     }
 
+    public async Task<HabitWithProgressDTO> AddHabit(Guid userId, CreateHabitDTO habitDto)
+    {
+        if (string.IsNullOrWhiteSpace(habitDto.Name) ||
+            string.IsNullOrWhiteSpace(habitDto.Frequency) ||
+            string.IsNullOrWhiteSpace(habitDto.GoalType))
+        {
+            throw new ArgumentException("All required fields must be provided.");
+        }
+
+        var newHabit = new Habit
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            Name = habitDto.Name,
+            Frequency = habitDto.Frequency,
+            GoalType = habitDto.GoalType,
+            TargetValue = habitDto.TargetValue,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _context.Habits.Add(newHabit);
+        await _context.SaveChangesAsync();
+
+        return new HabitWithProgressDTO // ✅ Convert to DTO
+        {
+            Id = newHabit.Id ?? Guid.Empty,
+            Name = newHabit.Name,
+            Frequency = newHabit.Frequency,
+            GoalType = newHabit.GoalType,
+            TargetValue = newHabit.TargetValue,
+            CurrentValue = 0, // Newly created habits start with 0 progress
+            Streak = 0,
+            IsCompleted = false
+        };
+    }
+
+
     // ✅ Get All Habits with Current Progress & Streaks
     public async Task<List<HabitWithProgressDTO>> GetAllHabits(Guid userId)
     {
