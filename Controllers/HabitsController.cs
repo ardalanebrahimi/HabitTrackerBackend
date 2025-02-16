@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
 using System.Security.Claims;
 
 [Authorize]
@@ -25,91 +26,126 @@ public class HabitsController : ControllerBase
         return userId;
     }
 
-    // ✅ Get today's habits including progress
     [HttpGet("today")]
-    public async Task<ActionResult<IEnumerable<Habit>>> GetTodayHabits()
+    public async Task<ActionResult<IEnumerable<HabitWithProgressDTO>>> GetTodayHabits()
     {
         var userId = GetUserId();
-        var today = DateTime.UtcNow.Date;
+        var today = DateTime.UtcNow;
+        var weekIdentifier = GetPeriodKey("weekly", today);
+        var monthIdentifier = GetPeriodKey("monthly", today);
 
         var habits = await _context.Habits
-            .Include(h => h.Logs)
             .Where(h => h.UserId == userId)
             .ToListAsync();
 
-        var filteredHabits = habits.Where(h =>
-            h.Frequency == "daily" ||
-            (h.Frequency == "weekly" && today >= GetStartOfWeek() && !HasMetWeeklyGoal(h)) ||
-            (h.Frequency == "monthly" && today >= GetStartOfMonth() && !HasMetMonthlyGoal(h))
-        ).ToList();
+        var filteredHabits = habits
+            .Where(h =>
+                h.Frequency == "daily" ||
+                (h.Frequency == "weekly" && !HasMetGoal(h.Id, weekIdentifier)) ||
+                (h.Frequency == "monthly" && !HasMetGoal(h.Id, monthIdentifier))
+            )
+            .Select(h => new HabitWithProgressDTO
+            {
+                Id = h.Id ?? Guid.Empty,
+                Name = h.Name,
+                Frequency = h.Frequency,
+                GoalType = h.GoalType,
+                TargetValue = h.TargetValue,
+                CurrentValue = GetCurrentProgress(h.Id ?? Guid.Empty, h.Frequency, today) // ✅ Dynamically calculated
+            })
+            .ToList();
 
         return filteredHabits;
     }
 
-    private DateTime GetStartOfWeek()
+    // ✅ Helper method to calculate `CurrentValue`
+    private int GetCurrentProgress(Guid habitId, string frequency, DateTime now)
     {
-        var today = DateTime.UtcNow.Date;
-        return today.AddDays(-(int)today.DayOfWeek + (int)DayOfWeek.Monday);
+        var periodKey = GetPeriodKey(frequency, now);
+        return _context.HabitLogs
+            .Where(l => l.HabitId == habitId && l.PeriodKey == periodKey)
+            .Sum(l => l.Value); // ✅ Sum all values for the current period
     }
 
-    private DateTime GetStartOfMonth()
+    // ✅ Checks if weekly/monthly goal is met
+    private bool HasMetGoal(Guid? habitId, int periodKey)
     {
-        return new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
+        return _context.HabitLogs.Any(l => l.HabitId == habitId && l.PeriodKey == periodKey);
     }
 
-    private bool HasMetWeeklyGoal(Habit habit)
+    // ✅ Helper method to determine the correct period
+    private int GetPeriodIdentifier(string frequency, DateTime now)
     {
-        var startOfWeek = GetStartOfWeek();
-        return habit.Logs.Any(log => log.Date >= startOfWeek);
+        return frequency switch
+        {
+            "daily" => int.Parse(now.ToString("yyyyMMdd")), // YYYYMMDD
+            "weekly" => int.Parse(now.ToString("yyyy")) * 100 + ISOWeek.GetWeekOfYear(now), // YYYYWW
+            "monthly" => int.Parse(now.ToString("yyyyMM")), // YYYYMM
+            _ => throw new ArgumentException("Invalid frequency")
+        };
+    }
+    public class HabitCompletionRequest
+    {
+        public bool Decrease { get; set; } = false;
     }
 
-    private bool HasMetMonthlyGoal(Habit habit)
-    {
-        var startOfMonth = GetStartOfMonth();
-        return habit.Logs.Any(log => log.Date >= startOfMonth);
-    }
-
-    // ✅ Mark Habit as Completed (+1) or Decrease Progress (-1)
     [HttpPost("{id}/complete")]
-    public async Task<IActionResult> CompleteHabit(Guid id, [FromBody] bool decrease = false)
+    public async Task<IActionResult> CompleteHabit(Guid id, [FromBody] HabitCompletionRequest request)
     {
         var userId = GetUserId();
-        var habit = await _context.Habits.Include(h => h.Logs).FirstOrDefaultAsync(h => h.Id == id && h.UserId == userId);
+        var habit = await _context.Habits.FirstOrDefaultAsync(h => h.Id == id && h.UserId == userId);
         if (habit == null) return NotFound("Habit not found.");
 
-        var today = DateTime.UtcNow.Date;
-        var existingLog = habit.Logs.FirstOrDefault(l => l.Date == today);
+        var now = DateTime.UtcNow;
+        var periodKey = GetPeriodKey(habit.Frequency, now);
 
-        if (!decrease)
+        var existingLog = await _context.HabitLogs
+            .FirstOrDefaultAsync(l => l.HabitId == id && l.PeriodKey == periodKey);
+
+        if (!request.Decrease)
         {
-            if (existingLog == null)
+            if (existingLog != null)
             {
-                habit.Logs.Add(new HabitLog
-                {
-                    Id = Guid.NewGuid(),
-                    HabitId = id,
-                    Date = today,
-                    Value = 1
-                });
+                existingLog.Value++; // ✅ Increase progress count in that period
             }
             else
             {
-                existingLog.Value++; // Only increase by 1 per call
+                var newLog = new HabitLog
+                {
+                    Id = Guid.NewGuid(),
+                    HabitId = id,
+                    Timestamp = now,
+                    PeriodKey = periodKey,
+                    Value = 1
+                };
+                _context.HabitLogs.Add(newLog);
             }
         }
         else
         {
             if (existingLog != null && existingLog.Value > 0)
             {
-                existingLog.Value--; // Decrease progress by 1
+                existingLog.Value--; // ✅ Decrease progress by 1
                 if (existingLog.Value == 0)
                 {
-                    _context.HabitLogs.Remove(existingLog); // Remove log if value reaches 0
+                    _context.HabitLogs.Remove(existingLog); // ✅ Remove log if Value reaches 0
                 }
             }
         }
 
         await _context.SaveChangesAsync();
         return Ok(habit);
+    }
+
+
+    private int GetPeriodKey(string frequency, DateTime now)
+    {
+        return frequency switch
+        {
+            "daily" => int.Parse(now.ToString("yyyyMMdd")), // ✅ YYYYMMDD
+            "weekly" => int.Parse(now.ToString("yyyy")) * 100 + ISOWeek.GetWeekOfYear(now), // ✅ YYYYWW
+            "monthly" => int.Parse(now.ToString("yyyyMM")), // ✅ YYYYMM
+            _ => throw new ArgumentException("Invalid frequency")
+        };
     }
 }

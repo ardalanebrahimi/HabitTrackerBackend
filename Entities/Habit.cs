@@ -32,15 +32,24 @@ public class Habit
 }
 
 
-// Habit log model for tracking progress
+[Table("habit_logs")]
 public class HabitLog
 {
     [Key]
+    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public Guid Id { get; set; }
 
+    [Required]
     [ForeignKey("Habit")]
     public Guid HabitId { get; set; }
 
-    public DateTime Date { get; set; }
-    public int Value { get; set; }
+    public DateTime Timestamp { get; set; } // ✅ Exact time of completion
+
+    [Required]
+    public int PeriodKey { get; set; } // ✅ Stores period dynamically:
+    // - Date (if daily) => YYYYMMDD
+    // - Week number (if weekly) => YYYYWW
+    // - Month number (if monthly) => YYYYMM
+
+    public int Value { get; set; } // ✅ Number of completions in that period
 }
