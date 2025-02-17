@@ -69,13 +69,12 @@ public class HabitService
         }).ToList();
     }
 
-    // ✅ Get Today's Habits (Filtered for today)
     public async Task<List<HabitWithProgressDTO>> GetTodayHabits(Guid userId)
     {
         var today = DateTime.UtcNow;
 
         var habits = await _context.Habits
-            .Where(h => h.UserId == userId)
+            .Where(h => h.UserId == userId && !h.IsArchived)  // ✅ Exclude archived habits
             .ToListAsync();
 
         return habits
@@ -92,8 +91,10 @@ public class HabitService
                 CurrentValue = GetCurrentProgress(h.Id ?? Guid.Empty, h.Frequency, today),
                 Streak = CalculateStreak(h.Id ?? Guid.Empty, h.Frequency, today),
                 IsCompleted = IsHabitCompleted(h.Id ?? Guid.Empty, h.Frequency, today)
-            }).ToList();
+            })
+            .ToList();
     }
+
 
     // ✅ Increase Habit Progress
     public async Task UpdateHabitProgress(Guid userId, Guid habitId, bool decrease)
