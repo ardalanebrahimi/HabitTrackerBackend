@@ -215,4 +215,20 @@ public class HabitService
     {
         return _context.HabitLogs.Any(l => l.HabitId == habitId && l.PeriodKey == periodKey);
     }
+
+    public async Task<bool> DeleteHabit(Guid userId, Guid habitId)
+    {
+        var habit = await _context.Habits
+            .FirstOrDefaultAsync(h => h.Id == habitId && h.UserId == userId);
+
+        if (habit == null)
+        {
+            return false; // Habit not found or user does not own it
+        }
+
+        _context.Habits.Remove(habit);
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
 }

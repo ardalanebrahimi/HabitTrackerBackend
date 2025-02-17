@@ -58,4 +58,18 @@ public class HabitsController : ControllerBase
         await _habitService.UpdateHabitProgress(userId, id, request.Decrease);
         return Ok();
     }
+
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> DeleteHabit(Guid id)
+    {
+        var userId = GetUserId();
+        var result = await _habitService.DeleteHabit(userId, id);
+
+        if (!result)
+        {
+            return NotFound("Habit not found or you do not have permission to delete it.");
+        }
+
+        return NoContent();
+    }
 }
