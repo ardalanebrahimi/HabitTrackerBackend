@@ -27,6 +27,8 @@ public class Habit
     [ForeignKey("User")]
     public Guid UserId { get; set; }
 
+    public bool IsArchived { get; set; } = false; 
+
     // Tracking completion logs
     public List<HabitLog> Logs { get; set; } = new List<HabitLog>();
 }

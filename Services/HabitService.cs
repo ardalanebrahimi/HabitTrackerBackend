@@ -230,5 +230,40 @@ public class HabitService
         await _context.SaveChangesAsync();
         return true;
     }
+    public async Task<bool> ArchiveHabit(Guid userId, Guid habitId)
+    {
+        var habit = await _context.Habits
+            .FirstOrDefaultAsync(h => h.Id == habitId && h.UserId == userId);
+
+        if (habit == null || habit.IsArchived)
+        {
+            return false;
+        }
+
+        habit.IsArchived = true;
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<List<HabitWithProgressDTO>> GetAllHabits(Guid userId, bool archived)
+    {
+        var today = DateTime.UtcNow;
+
+        var habits = await _context.Habits
+            .Where(h => h.UserId == userId && h.IsArchived == archived)
+            .ToListAsync();
+
+        return habits.Select(h => new HabitWithProgressDTO
+        {
+            Id = h.Id ?? Guid.Empty,
+            Name = h.Name,
+            Frequency = h.Frequency,
+            GoalType = h.GoalType,
+            TargetValue = h.TargetValue,
+            CurrentValue = GetCurrentProgress(h.Id ?? Guid.Empty, h.Frequency, today),
+            Streak = CalculateStreak(h.Id ?? Guid.Empty, h.Frequency, today),
+            IsCompleted = IsHabitCompleted(h.Id ?? Guid.Empty, h.Frequency, today)
+        }).ToList();
+    }
 
 }

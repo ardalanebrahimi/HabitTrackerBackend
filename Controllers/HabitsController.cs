@@ -72,4 +72,34 @@ public class HabitsController : ControllerBase
 
         return NoContent();
     }
+
+    [HttpPut("{id}/archive")]
+    public async Task<IActionResult> ArchiveHabit(Guid id)
+    {
+        var userId = GetUserId();
+        var result = await _habitService.ArchiveHabit(userId, id);
+
+        if (!result)
+        {
+            return NotFound("Habit not found or already archived.");
+        }
+
+        return NoContent();
+    }
+
+    [HttpGet("active")]
+    public async Task<ActionResult<IEnumerable<HabitWithProgressDTO>>> GetActiveHabits()
+    {
+        var userId = GetUserId();
+        return await _habitService.GetAllHabits(userId, false);
+    }
+
+    [HttpGet("archived")]
+    public async Task<ActionResult<IEnumerable<HabitWithProgressDTO>>> GetArchivedHabits()
+    {
+        var userId = GetUserId();
+        return await _habitService.GetAllHabits(userId, true);
+    }
+
+
 }
