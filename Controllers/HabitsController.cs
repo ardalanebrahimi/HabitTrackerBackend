@@ -101,5 +101,12 @@ public class HabitsController : ControllerBase
         return await _habitService.GetAllHabits(userId, true);
     }
 
+    [HttpPut("{id}")]
+    public async Task<IActionResult> UpdateHabit(Guid id, [FromBody] CreateHabitDTO updatedHabit)
+    {
+        var userId = GetUserId();
+        var updated = await _habitService.UpdateHabit(userId, id, updatedHabit);
+        return Ok(updated);
+    }
 
 }

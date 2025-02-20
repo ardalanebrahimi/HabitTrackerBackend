@@ -267,4 +267,35 @@ public class HabitService
         }).ToList();
     }
 
+    public async Task<HabitWithProgressDTO> UpdateHabit(Guid userId, Guid habitId, CreateHabitDTO updatedHabit)
+    {
+        var habit = await _context.Habits
+            .FirstOrDefaultAsync(h => h.Id == habitId && h.UserId == userId);
+
+        if (habit == null)
+            throw new ArgumentException("Habit not found.");
+
+        if (habit.IsArchived)
+            throw new InvalidOperationException("Archived habits cannot be edited.");
+
+        habit.Name = updatedHabit.Name;
+        habit.Frequency = updatedHabit.Frequency;
+        habit.GoalType = updatedHabit.GoalType;
+        habit.TargetValue = updatedHabit.TargetValue;
+
+        await _context.SaveChangesAsync();
+
+        return new HabitWithProgressDTO
+        {
+            Id = habit.Id ?? Guid.Empty,
+            Name = habit.Name,
+            Frequency = habit.Frequency,
+            GoalType = habit.GoalType,
+            TargetValue = habit.TargetValue,
+            CurrentValue = 0,
+            Streak = 0,
+            IsCompleted = false
+        };
+    }
+
 }

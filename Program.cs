@@ -97,7 +97,7 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-builder.Services.AddScoped<HabitService>();
+builder.Services.AddScoped<HabitService>();                                                                                                                                                         
 
 
 // Build the Application
