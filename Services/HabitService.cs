@@ -72,15 +72,17 @@ public class HabitService
     public async Task<List<HabitWithProgressDTO>> GetTodayHabits(Guid userId)
     {
         var today = DateTime.UtcNow;
+        var currentWeekKey = GetPeriodKey("weekly", today);  // Get the current week identifier
+        var currentMonthKey = GetPeriodKey("monthly", today); // Get the current month identifier
 
         var habits = await _context.Habits
-            .Where(h => h.UserId == userId && !h.IsArchived)  // ✅ Exclude archived habits
+            .Where(h => h.UserId == userId && !h.IsArchived) // ✅ Exclude archived habits
             .ToListAsync();
 
         return habits
             .Where(h => h.Frequency == "daily" ||
-                        (h.Frequency == "weekly" && !HasMetGoal(h.Id, GetPeriodKey("weekly", today))) ||
-                        (h.Frequency == "monthly" && !HasMetGoal(h.Id, GetPeriodKey("monthly", today))))
+                        (h.Frequency == "weekly" && IsHabitInCurrentWeek(h.Id, currentWeekKey)) ||
+                        (h.Frequency == "monthly" && IsHabitInCurrentMonth(h.Id, currentMonthKey)))
             .Select(h => new HabitWithProgressDTO
             {
                 Id = h.Id ?? Guid.Empty,
@@ -95,6 +97,25 @@ public class HabitService
             .ToList();
     }
 
+    // ✅ Check if a weekly habit is still in the current week
+    private bool IsHabitInCurrentWeek(Guid? habitId, int currentWeekKey)
+    {
+        int progress = GetCurrentProgress(habitId ?? Guid.Empty, "weekly", DateTime.UtcNow);
+        int? target = _context.Habits.Where(h => h.Id == habitId).Select(h => h.TargetValue).FirstOrDefault();
+
+        // ✅ Keep showing the habit until the end of the week
+        return progress < target || DateTime.UtcNow.DayOfWeek != DayOfWeek.Sunday;
+    }
+
+    // ✅ Keep monthly habits visible until the month ends
+    private bool IsHabitInCurrentMonth(Guid? habitId, int currentMonthKey)
+    {
+        int progress = GetCurrentProgress(habitId ?? Guid.Empty, "monthly", DateTime.UtcNow);
+        int? target = _context.Habits.Where(h => h.Id == habitId).Select(h => h.TargetValue).FirstOrDefault();
+
+        // ✅ Keep showing the habit even if the goal is reached, but mark it as completed
+        return progress < target || DateTime.UtcNow.Day < DateTime.DaysInMonth(DateTime.UtcNow.Year, DateTime.UtcNow.Month);
+    }
 
     // ✅ Increase Habit Progress
     public async Task UpdateHabitProgress(Guid userId, Guid habitId, bool decrease)
