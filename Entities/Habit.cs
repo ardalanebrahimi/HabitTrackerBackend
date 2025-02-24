@@ -45,13 +45,14 @@ public class HabitLog
     [ForeignKey("Habit")]
     public Guid HabitId { get; set; }
 
-    public DateTime Timestamp { get; set; } // ✅ Exact time of completion
+    public DateTime Timestamp { get; set; }
 
-    [Required]
-    public int PeriodKey { get; set; } // ✅ Stores period dynamically:
-    // - Date (if daily) => YYYYMMDD
-    // - Week number (if weekly) => YYYYWW
-    // - Month number (if monthly) => YYYYMM
+    // New: Store all period keys to simplify queries
+    [Required] public int DailyKey { get; set; }    // YYYYMMDD
+    [Required] public int WeeklyKey { get; set; }   // YYYYWW
+    [Required] public int MonthlyKey { get; set; } // YYYYMM
 
-    public int Value { get; set; } // ✅ Number of completions in that period
+    public int Value { get; set; } // +1/-1 to manage progress
+    public int Target { get; set; } // Habit target at the time of logging
 }
+

@@ -117,7 +117,6 @@ public class HabitService
         return progress < target || DateTime.UtcNow.Day < DateTime.DaysInMonth(DateTime.UtcNow.Year, DateTime.UtcNow.Month);
     }
 
-    // ✅ Increase Habit Progress
     public async Task UpdateHabitProgress(Guid userId, Guid habitId, bool decrease)
     {
         var habit = await _context.Habits
@@ -127,84 +126,103 @@ public class HabitService
             throw new ArgumentException("Habit not found.");
 
         var now = DateTime.UtcNow;
-        var periodKey = GetPeriodKey(habit.Frequency, now);
 
-        var existingLog = await _context.HabitLogs
-            .FirstOrDefaultAsync(l => l.HabitId == habitId && l.PeriodKey == periodKey);
-
-        if (!decrease)
+        var newLog = new HabitLog
         {
-            if (existingLog != null)
-            {
-                existingLog.Value++;
-            }
-            else
-            {
-                var newLog = new HabitLog
-                {
-                    Id = Guid.NewGuid(),
-                    HabitId = habitId,
-                    Timestamp = now,
-                    PeriodKey = periodKey,
-                    Value = 1
-                };
-                _context.HabitLogs.Add(newLog);
-            }
-        }
-        else
-        {
-            if (existingLog != null && existingLog.Value > 0)
-            {
-                existingLog.Value--;
-                if (existingLog.Value == 0)
-                {
-                    _context.HabitLogs.Remove(existingLog);
-                }
-            }
-        }
+            Id = Guid.NewGuid(),
+            HabitId = habitId,
+            Timestamp = now,
+            DailyKey = GetPeriodKey("daily", now),
+            WeeklyKey = GetPeriodKey("weekly", now),
+            MonthlyKey = GetPeriodKey("monthly", now),
+            Value = decrease ? -1 : 1, // +1 for progress, -1 for undo
+            Target = habit.TargetValue ?? 1
+        };
 
+        _context.HabitLogs.Add(newLog);
         await _context.SaveChangesAsync();
     }
 
-    // ✅ Get Current Progress
     private int GetCurrentProgress(Guid habitId, string frequency, DateTime now)
     {
-        var periodKey = GetPeriodKey(frequency, now);
-        return _context.HabitLogs
-            .Where(l => l.HabitId == habitId && l.PeriodKey == periodKey)
-            .Sum(l => l.Value);
+        int periodKey = frequency switch
+        {
+            "daily" => GetPeriodKey("daily", now),
+            "weekly" => GetPeriodKey("weekly", now),
+            "monthly" => GetPeriodKey("monthly", now),
+            _ => throw new ArgumentException("Invalid frequency")
+        };
+
+        // Select the correct period column dynamically
+        var query = _context.HabitLogs.Where(l => l.HabitId == habitId);
+
+        query = frequency switch
+        {
+            "daily" => query.Where(l => l.DailyKey == periodKey),
+            "weekly" => query.Where(l => l.WeeklyKey == periodKey),
+            "monthly" => query.Where(l => l.MonthlyKey == periodKey),
+            _ => query
+        };
+
+        return query.Sum(l => l.Value);
     }
 
-    // ✅ Calculate Habit Streak
     private int CalculateStreak(Guid habitId, string frequency, DateTime now)
     {
-        var logs = _context.HabitLogs
-            .Where(l => l.HabitId == habitId)
-            .OrderByDescending(l => l.Timestamp)
-            .Select(l => l.PeriodKey)
+        var logsQuery = _context.HabitLogs.Where(l => l.HabitId == habitId);
+
+        // ✅ Choose the correct period column based on frequency
+        var periodKeyColumn = frequency switch
+        {
+            "daily" => logsQuery.Select(l => l.DailyKey),
+            "weekly" => logsQuery.Select(l => l.WeeklyKey),
+            "monthly" => logsQuery.Select(l => l.MonthlyKey),
+            _ => throw new ArgumentException("Invalid frequency")
+        };
+
+        // ✅ Get unique period keys in descending order
+        var periodKeys = periodKeyColumn
+            .Distinct()
+            .OrderByDescending(p => p)
             .ToList();
 
         int streak = 0;
         int expectedPeriod = GetPeriodKey(frequency, now);
 
-        foreach (var period in logs)
+        foreach (var period in periodKeys)
         {
             if (period == expectedPeriod)
             {
                 streak++;
-                expectedPeriod = frequency switch
-                {
-                    "daily" => expectedPeriod - 1,
-                    "weekly" => expectedPeriod - 1,
-                    "monthly" => expectedPeriod - 1,
-                    _ => expectedPeriod
-                };
+                expectedPeriod = GetPreviousPeriodKey(frequency, expectedPeriod);
             }
-            else break;
+            else
+            {
+                // Streak is broken if the next expected period is missing
+                break;
+            }
         }
 
         return streak;
     }
+
+    private int GetPreviousPeriodKey(string frequency, int currentPeriod)
+    {
+        return frequency switch
+        {
+            "daily" => currentPeriod - 1,
+            "weekly" =>
+                currentPeriod % 100 > 1 // Check if it's not the first week of the year
+                    ? currentPeriod - 1
+                    : (currentPeriod / 100 - 1) * 100 + 52, // Wrap around to the last week of previous year
+            "monthly" =>
+                currentPeriod % 100 > 1 // Check if it's not January
+                    ? currentPeriod - 1
+                    : (currentPeriod / 100 - 1) * 100 + 12, // Wrap around to December of previous year
+            _ => throw new ArgumentException("Invalid frequency")
+        };
+    }
+
 
     // ✅ Check if Habit is Completed
     private bool IsHabitCompleted(Guid habitId, string frequency, DateTime now)
@@ -230,12 +248,6 @@ public class HabitService
             "monthly" => int.Parse(now.ToString("yyyyMM")),
             _ => throw new ArgumentException("Invalid frequency")
         };
-    }
-
-    // ✅ Helper: Check if Goal is Met for Weekly/Monthly Habits
-    private bool HasMetGoal(Guid? habitId, int periodKey)
-    {
-        return _context.HabitLogs.Any(l => l.HabitId == habitId && l.PeriodKey == periodKey);
     }
 
     public async Task<bool> DeleteHabit(Guid userId, Guid habitId)
