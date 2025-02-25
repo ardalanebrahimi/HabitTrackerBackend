@@ -53,7 +53,7 @@ public class HabitService
         var today = DateTime.UtcNow;
 
         var habits = await _context.Habits
-            .Where(h => h.UserId == userId)
+            .Where(h => h.UserId == userId && !h.IsArchived)
             .ToListAsync();
 
         return habits.Select(h => new HabitWithProgressDTO
