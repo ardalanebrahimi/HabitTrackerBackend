@@ -330,5 +330,27 @@ public class HabitService
             IsCompleted = false
         };
     }
+    public async Task<HabitWithProgressDTO?> GetHabitById(Guid userId, Guid habitId)
+    {
+        var habit = await _context.Habits
+            .Where(h => h.Id == habitId && h.UserId == userId)
+            .FirstOrDefaultAsync();
+
+        if (habit == null) return null;
+
+        var today = DateTime.UtcNow;
+
+        return new HabitWithProgressDTO
+        {
+            Id = habit.Id ?? Guid.Empty,
+            Name = habit.Name,
+            Frequency = habit.Frequency,
+            GoalType = habit.GoalType,
+            TargetValue = habit.TargetValue,
+            CurrentValue = GetCurrentProgress(habit.Id ?? Guid.Empty, habit.Frequency, today),
+            Streak = CalculateStreak(habit.Id ?? Guid.Empty, habit.Frequency, today),
+            IsCompleted = IsHabitCompleted(habit.Id ?? Guid.Empty, habit.Frequency, today)
+        };
+    }
 
 }

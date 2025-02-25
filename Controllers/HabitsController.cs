@@ -109,4 +109,19 @@ public class HabitsController : ControllerBase
         return Ok(updated);
     }
 
+    [HttpGet("{id}")]
+    public async Task<ActionResult<HabitWithProgressDTO>> GetHabitById(Guid id)
+    {
+        var userId = GetUserId();
+        var habit = await _habitService.GetHabitById(userId, id);
+
+        if (habit == null)
+        {
+            return NotFound("Habit not found.");
+        }
+
+        return Ok(habit);
+    }
+
+
 }
