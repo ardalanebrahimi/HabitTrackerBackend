@@ -12,11 +12,9 @@ public class HabitService
 
     public async Task<HabitWithProgressDTO> AddHabit(Guid userId, CreateHabitDTO habitDto)
     {
-        if (string.IsNullOrWhiteSpace(habitDto.Name) ||
-            string.IsNullOrWhiteSpace(habitDto.Frequency) ||
-            string.IsNullOrWhiteSpace(habitDto.GoalType))
+        if (string.IsNullOrWhiteSpace(habitDto.Name))
         {
-            throw new ArgumentException("All required fields must be provided.");
+            throw new ArgumentException("Habit name is required.");
         }
 
         var newHabit = new Habit
@@ -24,27 +22,34 @@ public class HabitService
             Id = Guid.NewGuid(),
             UserId = userId,
             Name = habitDto.Name,
+            Description = habitDto.Description,
             Frequency = habitDto.Frequency,
             GoalType = habitDto.GoalType,
             TargetValue = habitDto.TargetValue,
+            StreakTarget = habitDto.StreakTarget,
+            EndDate = habitDto.EndDate?.ToUniversalTime(),
+            AllowedGaps = habitDto.AllowedGaps,
+            TargetType = habitDto.TargetType,
+            StartDate = habitDto.StartDate?.ToUniversalTime() ?? DateTime.UtcNow, // Default to today if not set
             CreatedAt = DateTime.UtcNow
         };
 
         _context.Habits.Add(newHabit);
         await _context.SaveChangesAsync();
 
-        return new HabitWithProgressDTO // ✅ Convert to DTO
+        return new HabitWithProgressDTO
         {
             Id = newHabit.Id ?? Guid.Empty,
             Name = newHabit.Name,
             Frequency = newHabit.Frequency,
             GoalType = newHabit.GoalType,
             TargetValue = newHabit.TargetValue,
-            CurrentValue = 0, // Newly created habits start with 0 progress
+            TargetType = habitDto.TargetType,
             Streak = 0,
             IsCompleted = false
         };
     }
+
 
 
     // ✅ Get All Habits with Current Progress & Streaks

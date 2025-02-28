@@ -1,7 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.ComponentModel.DataAnnotations.Schema;
 using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
 
 [Table("habits")]
 public class Habit
@@ -10,16 +8,26 @@ public class Habit
     [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public Guid? Id { get; set; }
 
-    [Required]
+    [Required(ErrorMessage = "Name is required.")]
     public string Name { get; set; }
 
-    [Required]
-    public string Frequency { get; set; } // "daily", "weekly", "monthly"
+    [Required(ErrorMessage = "Frequency is required.")]
+    [RegularExpression("daily|weekly|monthly", ErrorMessage = "Invalid frequency.")]
+    public string Frequency { get; set; }
 
-    [Required]
-    public string GoalType { get; set; } // "binary" or "numeric"
+    [Required(ErrorMessage = "Goal Type is required.")]
+    [RegularExpression("binary|numeric", ErrorMessage = "Invalid goal type.")]
+    public string GoalType { get; set; }
+
+
+    public string? Description { get; set; } // Optional description
 
     public int? TargetValue { get; set; }
+    public string TargetType { get; set; } = "ongoing"; // "ongoing", "streak", "endDate"
+    public int? StreakTarget { get; set; } // Optional streak target
+    public DateTime? EndDate { get; set; } // Optional end date
+    public int AllowedGaps { get; set; } = 0; // Allowed gaps before streak breaks
+    public DateTime? StartDate { get; set; } // Optional start date
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
@@ -27,32 +35,8 @@ public class Habit
     [ForeignKey("User")]
     public Guid UserId { get; set; }
 
-    public bool IsArchived { get; set; } = false; 
+    public bool IsArchived { get; set; } = false;
 
     // Tracking completion logs
     public List<HabitLog> Logs { get; set; } = new List<HabitLog>();
 }
-
-
-[Table("habit_logs")]
-public class HabitLog
-{
-    [Key]
-    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
-    public Guid Id { get; set; }
-
-    [Required]
-    [ForeignKey("Habit")]
-    public Guid HabitId { get; set; }
-
-    public DateTime Timestamp { get; set; }
-
-    // New: Store all period keys to simplify queries
-    [Required] public int DailyKey { get; set; }    // YYYYMMDD
-    [Required] public int WeeklyKey { get; set; }   // YYYYWW
-    [Required] public int MonthlyKey { get; set; } // YYYYMM
-
-    public int Value { get; set; } // +1/-1 to manage progress
-    public int Target { get; set; } // Habit target at the time of logging
-}
-
