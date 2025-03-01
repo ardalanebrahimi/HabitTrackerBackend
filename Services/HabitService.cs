@@ -86,6 +86,7 @@ public class HabitService
 
         return habits
             .Where(h => !HasReachedCompletion(h.Id, h.StreakTarget, h.EndDate) && 
+                (!h.StartDate.HasValue || today.Date <= h.StartDate.Value.Date) &&
                 (h.Frequency == "daily" ||
                 (h.Frequency == "weekly" && IsHabitInCurrentWeek(h.Id, currentWeekKey)) ||
                 (h.Frequency == "monthly" && IsHabitInCurrentMonth(h.Id, currentMonthKey))))
