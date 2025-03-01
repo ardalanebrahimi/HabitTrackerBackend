@@ -85,9 +85,10 @@ public class HabitService
             .ToListAsync();
 
         return habits
-            .Where(h => h.Frequency == "daily" ||
-                        (h.Frequency == "weekly" && IsHabitInCurrentWeek(h.Id, currentWeekKey)) ||
-                        (h.Frequency == "monthly" && IsHabitInCurrentMonth(h.Id, currentMonthKey)))
+            .Where(h => !HasReachedCompletion(h.Id, h.StreakTarget, h.EndDate) && 
+                (h.Frequency == "daily" ||
+                (h.Frequency == "weekly" && IsHabitInCurrentWeek(h.Id, currentWeekKey)) ||
+                (h.Frequency == "monthly" && IsHabitInCurrentMonth(h.Id, currentMonthKey))))
             .Select(h => new HabitWithProgressDTO
             {
                 Id = h.Id ?? Guid.Empty,
@@ -100,6 +101,23 @@ public class HabitService
                 IsCompleted = IsHabitCompleted(h.Id ?? Guid.Empty, h.Frequency, today)
             })
             .ToList();
+    }
+
+    // ✅ Check if Habit is Completed by Streak or End Date
+    private bool HasReachedCompletion(Guid? habitId, int? streakTarget, DateTime? endDate)
+    {
+        if (streakTarget != null)
+        {
+            int currentStreak = CalculateStreak(habitId ?? Guid.Empty, "daily", DateTime.UtcNow);
+            if (currentStreak >= streakTarget) return true; // ✅ Exclude if streak target is met
+        }
+
+        if (endDate != null && DateTime.UtcNow.Date > endDate.Value.Date)
+        {
+            return true; // ✅ Exclude if past end date
+        }
+
+        return false; // ✅ Habit is still active
     }
 
     // ✅ Check if a weekly habit is still in the current week
