@@ -193,37 +193,62 @@ public class HabitService
 
     private int CalculateStreak(Guid habitId, string frequency, DateTime now)
     {
+        var habit = _context.Habits.FirstOrDefault(h => h.Id == habitId);
+        if (habit == null) return 0;
+
+        frequency = NormalizeFrequency(frequency);
+
+        var periodKeys = GetHabitLogPeriods(habitId, frequency);
+        if (!periodKeys.Any()) return 0; // No logs found, streak is 0
+
+        int allowedGaps = (frequency == "daily") ? habit.AllowedGaps : 0;
+        return ComputeStreak(periodKeys, frequency, now, allowedGaps);
+    }
+
+    /// ✅ Normalize frequency input
+    private string NormalizeFrequency(string frequency)
+    {
+        if (string.IsNullOrWhiteSpace(frequency))
+        {
+            throw new ArgumentException("[ERROR] Frequency is NULL or empty.");
+        }
+        return frequency.Trim().ToLower();
+    }
+
+    /// ✅ Get the period keys from logs for the given habit
+    private List<int> GetHabitLogPeriods(Guid habitId, string frequency)
+    {
         var logsQuery = _context.HabitLogs.Where(l => l.HabitId == habitId);
 
-        // ✅ Choose the correct period column based on frequency
-        var periodKeyColumn = frequency switch
+        return frequency switch
         {
-            "daily" => logsQuery.Select(l => l.DailyKey),
-            "weekly" => logsQuery.Select(l => l.WeeklyKey),
-            "monthly" => logsQuery.Select(l => l.MonthlyKey),
-            _ => throw new ArgumentException("Invalid frequency")
+            "daily" => logsQuery.Select(l => l.DailyKey).Distinct().OrderByDescending(p => p).ToList(),
+            "weekly" => logsQuery.Select(l => l.WeeklyKey).Distinct().OrderByDescending(p => p).ToList(),
+            "monthly" => logsQuery.Select(l => l.MonthlyKey).Distinct().OrderByDescending(p => p).ToList(),
+            _ => throw new ArgumentException($"[ERROR] Invalid frequency '{frequency}' for habit {habitId}")
         };
+    }
 
-        // ✅ Get unique period keys in descending order
-        var periodKeys = periodKeyColumn
-            .Distinct()
-            .OrderByDescending(p => p)
-            .ToList();
-
+    /// ✅ Compute the streak while considering allowed gaps (for daily only)
+    private int ComputeStreak(List<int> periodKeys, string frequency, DateTime now, int allowedGaps)
+    {
         int streak = 0;
         int expectedPeriod = GetPeriodKey(frequency, now);
+        int gapCount = 0;
 
         foreach (var period in periodKeys)
         {
             if (period == expectedPeriod)
             {
                 streak++;
+                gapCount = 0; // ✅ Reset gaps since habit was logged
                 expectedPeriod = GetPreviousPeriodKey(frequency, expectedPeriod);
             }
             else
             {
-                // Streak is broken if the next expected period is missing
-                break;
+                gapCount++;
+                if (gapCount > allowedGaps) break; // ✅ Streak breaks if gaps exceed limit
+                expectedPeriod = GetPreviousPeriodKey(frequency, expectedPeriod);
             }
         }
 

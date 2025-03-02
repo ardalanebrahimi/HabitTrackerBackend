@@ -19,16 +19,13 @@ public class Habit
     [RegularExpression("binary|numeric", ErrorMessage = "Invalid goal type.")]
     public string GoalType { get; set; }
 
-
     public string? Description { get; set; } // Optional description
-
     public int? TargetValue { get; set; }
     public string TargetType { get; set; } = "ongoing"; // "ongoing", "streak", "endDate"
     public int? StreakTarget { get; set; } // Optional streak target
     public DateTime? EndDate { get; set; } // Optional end date
-    public int AllowedGaps { get; set; } = 0; // Allowed gaps before streak breaks
+    public int AllowedGaps { get; set; } = 1; // Allowed gaps before streak breaks
     public DateTime? StartDate { get; set; } // Optional start date
-
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     [Required]
@@ -37,6 +34,5 @@ public class Habit
 
     public bool IsArchived { get; set; } = false;
 
-    // Tracking completion logs
     public List<HabitLog> Logs { get; set; } = new List<HabitLog>();
 }
