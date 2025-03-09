@@ -20,4 +20,6 @@ public class User : IdentityUser<Guid>
     public string UserName { get; set; }
     public string RefreshToken { get; set; }
     public DateTime RefreshTokenExpiryTime { get; set; }
+    public virtual ICollection<Connection> SentConnections { get; set; } = new List<Connection>();
+    public virtual ICollection<Connection> ReceivedConnections { get; set; } = new List<Connection>();
 }

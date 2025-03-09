@@ -25,5 +25,18 @@ public class AppDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
             .HasMany(h => h.Logs)
             .WithOne()
             .HasForeignKey(l => l.HabitId);
+
+
+        modelBuilder.Entity<Connection>()
+            .HasOne(uc => uc.RequesterUser)
+            .WithMany(u => u.SentConnections)
+            .HasForeignKey(uc => uc.UserId) 
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<Connection>()
+            .HasOne(uc => uc.ReceiverUser)
+            .WithMany(u => u.ReceivedConnections)
+            .HasForeignKey(uc => uc.ConnectedUserId) 
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }
