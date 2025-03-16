@@ -30,7 +30,7 @@ public class HabitService
             EndDate = habitDto.EndDate?.ToUniversalTime(),
             AllowedGaps = habitDto.AllowedGaps,
             TargetType = habitDto.TargetType,
-            StartDate = habitDto.StartDate?.ToUniversalTime() ?? DateTime.UtcNow, // Default to today if not set
+            StartDate = habitDto.StartDate?.ToUniversalTime() ?? DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -41,10 +41,14 @@ public class HabitService
         {
             Id = newHabit.Id ?? Guid.Empty,
             Name = newHabit.Name,
+            Description = newHabit.Description,
             Frequency = newHabit.Frequency,
             GoalType = newHabit.GoalType,
             TargetValue = newHabit.TargetValue,
-            TargetType = habitDto.TargetType,
+            TargetType = newHabit.TargetType,
+            StreakTarget = newHabit.StreakTarget,
+            EndDate = newHabit.EndDate,
+            CurrentValue = 0,
             Streak = 0,
             IsCompleted = false
         };
@@ -348,7 +352,6 @@ public class HabitService
             IsCompleted = IsHabitCompleted(h.Id ?? Guid.Empty, h.Frequency, today)
         }).ToList();
     }
-
     public async Task<HabitWithProgressDTO> UpdateHabit(Guid userId, Guid habitId, CreateHabitDTO updatedHabit)
     {
         var habit = await _context.Habits
@@ -361,9 +364,15 @@ public class HabitService
             throw new InvalidOperationException("Archived habits cannot be edited.");
 
         habit.Name = updatedHabit.Name;
+        habit.Description = updatedHabit.Description;
         habit.Frequency = updatedHabit.Frequency;
         habit.GoalType = updatedHabit.GoalType;
         habit.TargetValue = updatedHabit.TargetValue;
+        habit.StreakTarget = updatedHabit.StreakTarget;
+        habit.EndDate = updatedHabit.EndDate?.ToUniversalTime();
+        habit.AllowedGaps = updatedHabit.AllowedGaps;
+        habit.TargetType = updatedHabit.TargetType;
+        habit.StartDate = updatedHabit.StartDate?.ToUniversalTime() ?? habit.StartDate;
 
         await _context.SaveChangesAsync();
 
@@ -371,9 +380,13 @@ public class HabitService
         {
             Id = habit.Id ?? Guid.Empty,
             Name = habit.Name,
+            Description = habit.Description,
             Frequency = habit.Frequency,
             GoalType = habit.GoalType,
             TargetValue = habit.TargetValue,
+            TargetType = habit.TargetType,
+            StreakTarget = habit.StreakTarget,
+            EndDate = habit.EndDate,
             CurrentValue = 0,
             Streak = 0,
             IsCompleted = false
@@ -388,18 +401,20 @@ public class HabitService
         if (habit == null) return null;
 
         var today = DateTime.UtcNow;
-
         return new HabitWithProgressDTO
         {
             Id = habit.Id ?? Guid.Empty,
             Name = habit.Name,
+            Description = habit.Description,
             Frequency = habit.Frequency,
             GoalType = habit.GoalType,
             TargetValue = habit.TargetValue,
+            TargetType = habit.TargetType,
+            StreakTarget = habit.StreakTarget,
+            EndDate = habit.EndDate,
             CurrentValue = GetCurrentProgress(habit.Id ?? Guid.Empty, habit.Frequency, today),
             Streak = CalculateStreak(habit.Id ?? Guid.Empty, habit.Frequency, today),
             IsCompleted = IsHabitCompleted(habit.Id ?? Guid.Empty, habit.Frequency, today)
         };
     }
-
 }
