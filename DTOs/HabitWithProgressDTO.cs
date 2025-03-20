@@ -1,4 +1,7 @@
-﻿public class HabitWithProgressDTO
+﻿using System;
+using System.Collections.Generic;
+
+public class HabitWithProgressDTO
 {
     public Guid Id { get; set; }
     public string Name { get; set; }
@@ -12,4 +15,5 @@
     public int CurrentValue { get; set; }
     public int Streak { get; set; }
     public bool IsCompleted { get; set; }
+    public List<HabitLogDTO> RecentLogs { get; set; } = new List<HabitLogDTO>();
 }

@@ -392,6 +392,56 @@ public class HabitService
             IsCompleted = false
         };
     }
+    public async Task<List<HabitLogDTO>> GetHabitLogs(Guid userId, Guid habitId, DateTime startDate, DateTime endDate)
+    {
+        var habit = await _context.Habits
+            .FirstOrDefaultAsync(h => h.Id == habitId && h.UserId == userId);
+
+        if (habit == null)
+            throw new ArgumentException("Habit not found or you don't have access to it.");
+
+        return await _context.HabitLogs
+            .Where(l => l.HabitId == habitId && l.Timestamp >= startDate && l.Timestamp <= endDate)
+            .OrderByDescending(l => l.Timestamp)
+            .Select(l => new HabitLogDTO
+            {
+                Id = l.Id,
+                Timestamp = l.Timestamp,
+                Value = l.Value,
+                Target = l.Target,
+                DailyKey = l.DailyKey,
+                WeeklyKey = l.WeeklyKey,
+                MonthlyKey = l.MonthlyKey
+            })
+            .ToListAsync();
+    }
+
+    private async Task<List<HabitLogDTO>> GetRecentLogs(Guid habitId, string frequency, DateTime now)
+    {
+        var startDate = frequency switch
+        {
+            "daily" => now.AddDays(-7),
+            "weekly" => now.AddDays(-7 * 7),
+            "monthly" => now.AddMonths(-7),
+            _ => throw new ArgumentException("Invalid frequency")
+        };
+
+        return await _context.HabitLogs
+            .Where(l => l.HabitId == habitId && l.Timestamp >= startDate)
+            .OrderByDescending(l => l.Timestamp)
+            .Select(l => new HabitLogDTO
+            {
+                Id = l.Id,
+                Timestamp = l.Timestamp,
+                Value = l.Value,
+                Target = l.Target,
+                DailyKey = l.DailyKey,
+                WeeklyKey = l.WeeklyKey,
+                MonthlyKey = l.MonthlyKey
+            })
+            .ToListAsync();
+    }
+
     public async Task<HabitWithProgressDTO?> GetHabitById(Guid userId, Guid habitId)
     {
         var habit = await _context.Habits
@@ -401,6 +451,8 @@ public class HabitService
         if (habit == null) return null;
 
         var today = DateTime.UtcNow;
+        var recentLogs = await GetRecentLogs(habitId, habit.Frequency, today);
+
         return new HabitWithProgressDTO
         {
             Id = habit.Id ?? Guid.Empty,
@@ -414,7 +466,8 @@ public class HabitService
             EndDate = habit.EndDate,
             CurrentValue = GetCurrentProgress(habit.Id ?? Guid.Empty, habit.Frequency, today),
             Streak = CalculateStreak(habit.Id ?? Guid.Empty, habit.Frequency, today),
-            IsCompleted = IsHabitCompleted(habit.Id ?? Guid.Empty, habit.Frequency, today)
+            IsCompleted = IsHabitCompleted(habit.Id ?? Guid.Empty, habit.Frequency, today),
+            RecentLogs = recentLogs
         };
     }
 }
