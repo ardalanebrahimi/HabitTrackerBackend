@@ -163,6 +163,58 @@ public class ConnectionController : ControllerBase
 
         return Ok(new { message = "Connection rejected" });
     }
+
+    [HttpPost("check-request")]
+    public async Task<IActionResult> RequestHabitCheck([FromBody] HabitCheckRequestDTO request)
+    {
+        var userId = GetUserId();
+
+        // Verify the habit exists and belongs to the requesting user
+        var habit = await _context.Habits
+            .FirstOrDefaultAsync(h => h.Id == request.HabitId && h.UserId == userId);
+
+        if (habit == null)
+        {
+            return NotFound(new { message = "Habit not found or you don't have access to it." });
+        }
+
+        // Verify all requested users exist and are connected
+        var connectedUserIds = await _context.Connections
+            .Where(c => c.UserId == userId && c.Status == ConnectionStatus.Approved)
+            .Select(c => c.ConnectedUserId)
+            .ToListAsync();
+
+        var invalidUserIds = request.UserIds
+            .Where(id => !connectedUserIds.Contains(Guid.Parse(id)))
+            .ToList();
+
+        if (invalidUserIds.Any())
+        {
+            return BadRequest(new { 
+                message = "Some users are not connected to you.", 
+                invalidUserIds 
+            });
+        }
+
+        // Create check requests for each user
+        var checkRequests = request.UserIds.Select(requestedUserId => new HabitCheckRequest
+        {
+            Id = Guid.NewGuid(),
+            HabitId = request.HabitId,
+            RequesterId = userId,
+            RequestedUserId = Guid.Parse(requestedUserId),
+            Status = CheckRequestStatus.Pending,
+            CreatedAt = DateTime.UtcNow
+        });
+
+        _context.HabitCheckRequests.AddRange(checkRequests);
+        await _context.SaveChangesAsync();
+
+        return Ok(new { 
+            message = "Check requests sent successfully",
+            requestCount = checkRequests.Count()
+        });
+    }
 }
 
 
@@ -170,4 +222,10 @@ public class ConnectionController : ControllerBase
 public class ConnectionRequest
 {
     public Guid ConnectedUserId { get; set; }
+}
+
+public class HabitCheckRequestDTO
+{
+    public Guid HabitId { get; set; }
+    public string[] UserIds { get; set; }
 }

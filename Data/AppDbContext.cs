@@ -10,6 +10,7 @@ public class AppDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
     public DbSet<Habit> Habits { get; set; }
     public DbSet<HabitLog> HabitLogs { get; set; }
     public DbSet<Connection> Connections { get; set; }
+    public DbSet<HabitCheckRequest> HabitCheckRequests { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
