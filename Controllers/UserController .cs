@@ -65,7 +65,11 @@ public class UserController : ControllerBase
         user.RefreshTokenExpiryTime = DateTime.UtcNow.AddMonths(6); // Extend to 6 months
         await _context.SaveChangesAsync();
 
-        return Ok(new { AccessToken = accessToken, RefreshToken = refreshToken });
+        return Ok(new { 
+            AccessToken = accessToken, 
+            RefreshToken = refreshToken,
+            UserName = user.UserName
+        });
     }
 
     [HttpPost("refresh")]
@@ -87,7 +91,11 @@ public class UserController : ControllerBase
         user.RefreshTokenExpiryTime = DateTime.UtcNow.AddMonths(6); // Extend refresh token validity
         await _context.SaveChangesAsync();
 
-        return Ok(new { AccessToken = newAccessToken, RefreshToken = newRefreshToken });
+        return Ok(new { 
+            AccessToken = newAccessToken, 
+            RefreshToken = newRefreshToken,
+            UserName = user.UserName
+        });
     }
 
     [HttpPost("logout")]
