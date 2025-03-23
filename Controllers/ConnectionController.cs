@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
+using System.Text.Json;
 
 [ApiController]
 [Route("api/[controller]")]
@@ -81,13 +82,31 @@ public class ConnectionController : ControllerBase
             return BadRequest(new { message = "You already have a connection or pending request." });
         }
 
+        var requester = await _context.Users.FindAsync(GetUserId());
         var newConnection = new Connection
         {
+            Id = Guid.NewGuid(),
             UserId = GetUserId(),
-            ConnectedUserId = request.ConnectedUserId
+            ConnectedUserId = request.ConnectedUserId,
+            Status = ConnectionStatus.Pending,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        // Create notification for the recipient
+        var notification = new Notification
+        {
+            Id = Guid.NewGuid(),
+            UserId = request.ConnectedUserId,
+            Type = NotificationType.ConnectionRequest,
+            Title = "New Connection Request",
+            Message = $"{requester.UserName} wants to connect with you",
+            Data = JsonSerializer.Serialize(new { ConnectionId = newConnection.Id }),
+            IsRead = false,
+            CreatedAt = DateTime.UtcNow
         };
 
         _context.Connections.Add(newConnection);
+        _context.Notifications.Add(notification);
         await _context.SaveChangesAsync();
 
         return Ok(new { message = "Connection request sent." });
@@ -196,23 +215,50 @@ public class ConnectionController : ControllerBase
             });
         }
 
-        // Create check requests for each user
-        var checkRequests = request.UserIds.Select(requestedUserId => new HabitCheckRequest
+        var requester = await _context.Users.FindAsync(userId);
+        var notifications = new List<Notification>();
+        var checkRequests = new List<HabitCheckRequest>();
+
+        // Create check requests and notifications for each user
+        foreach (var requestedUserId in request.UserIds)
         {
-            Id = Guid.NewGuid(),
-            HabitId = request.HabitId,
-            RequesterId = userId,
-            RequestedUserId = Guid.Parse(requestedUserId),
-            Status = CheckRequestStatus.Pending,
-            CreatedAt = DateTime.UtcNow
-        });
+            var checkRequest = new HabitCheckRequest
+            {
+                Id = Guid.NewGuid(),
+                HabitId = request.HabitId,
+                RequesterId = userId,
+                RequestedUserId = Guid.Parse(requestedUserId),
+                Status = CheckRequestStatus.Pending,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            var notification = new Notification
+            {
+                Id = Guid.NewGuid(),
+                UserId = Guid.Parse(requestedUserId),
+                Type = NotificationType.HabitCheckRequest,
+                Title = "New Habit Check Request",
+                Message = $"{requester.UserName} asked you to verify their habit progress",
+                Data = JsonSerializer.Serialize(new { 
+                    HabitCheckRequestId = checkRequest.Id,
+                    HabitId = habit.Id,
+                    HabitName = habit.Name
+                }),
+                IsRead = false,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            checkRequests.Add(checkRequest);
+            notifications.Add(notification);
+        }
 
         _context.HabitCheckRequests.AddRange(checkRequests);
+        _context.Notifications.AddRange(notifications);
         await _context.SaveChangesAsync();
 
         return Ok(new { 
             message = "Check requests sent successfully",
-            requestCount = checkRequests.Count()
+            requestCount = checkRequests.Count
         });
     }
 }

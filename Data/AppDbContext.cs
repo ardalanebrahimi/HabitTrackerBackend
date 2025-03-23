@@ -11,6 +11,7 @@ public class AppDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
     public DbSet<HabitLog> HabitLogs { get; set; }
     public DbSet<Connection> Connections { get; set; }
     public DbSet<HabitCheckRequest> HabitCheckRequests { get; set; }
+    public DbSet<Notification> Notifications { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -20,6 +21,7 @@ public class AppDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
         modelBuilder.Entity<IdentityRole<Guid>>().ToTable("roles");
         modelBuilder.Entity<IdentityUserRole<Guid>>().ToTable("user_roles");
         modelBuilder.Entity<Connection>().ToTable("connections");
+        modelBuilder.Entity<Notification>().ToTable("notifications");
 
         // Ensure Habit-Log Relationship
         modelBuilder.Entity<Habit>()
