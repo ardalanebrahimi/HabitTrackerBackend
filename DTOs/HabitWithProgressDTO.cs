@@ -16,4 +16,6 @@ public class HabitWithProgressDTO
     public int Streak { get; set; }
     public bool IsCompleted { get; set; }
     public List<HabitLogDTO> RecentLogs { get; set; } = new List<HabitLogDTO>();
+    public Guid UserId { get; set; }
+    public string UserName { get; set; }
 }

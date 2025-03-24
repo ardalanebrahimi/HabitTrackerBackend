@@ -86,6 +86,7 @@ public class HabitService
 
         var habits = await _context.Habits
             .Where(h => userIds.Contains(h.UserId) && !h.IsArchived) // ✅ Exclude archived habits
+            .Include(h => h.User) // Include the User entity
             .ToListAsync();
 
         return habits
@@ -103,7 +104,9 @@ public class HabitService
                 TargetValue = h.TargetValue,
                 CurrentValue = GetCurrentProgress(h.Id ?? Guid.Empty, h.Frequency, today),
                 Streak = CalculateStreak(h.Id ?? Guid.Empty, h.Frequency, today),
-                IsCompleted = IsHabitCompleted(h.Id ?? Guid.Empty, h.Frequency, today)
+                IsCompleted = IsHabitCompleted(h.Id ?? Guid.Empty, h.Frequency, today),
+                UserId = h.UserId,
+                UserName = h.User.UserName,
             })
             .ToList();
     }
