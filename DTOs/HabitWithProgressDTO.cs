@@ -18,4 +18,5 @@ public class HabitWithProgressDTO
     public List<HabitLogDTO> RecentLogs { get; set; } = new List<HabitLogDTO>();
     public Guid UserId { get; set; }
     public string UserName { get; set; }
+    public bool IsFriendsHabit { get; set; }
 }

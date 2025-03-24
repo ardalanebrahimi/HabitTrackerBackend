@@ -78,7 +78,7 @@ public class HabitService
         }).ToList();
     }
 
-    public async Task<List<HabitWithProgressDTO>> GetTodayHabits(List<Guid> userIds)
+    public async Task<List<HabitWithProgressDTO>> GetTodayHabits(List<Guid> userIds, bool IsFriendsHabit = false)
     {
         var today = DateTime.UtcNow;
         var currentWeekKey = GetPeriodKey("weekly", today);  // Get the current week identifier
@@ -107,6 +107,7 @@ public class HabitService
                 IsCompleted = IsHabitCompleted(h.Id ?? Guid.Empty, h.Frequency, today),
                 UserId = h.UserId,
                 UserName = h.User.UserName,
+                IsFriendsHabit = IsFriendsHabit,
             })
             .ToList();
     }
@@ -483,6 +484,6 @@ public class HabitService
             .ToListAsync();
 
         // Get today's habits for all connected friends
-        return await GetTodayHabits(connectedUserIds);
+        return await GetTodayHabits(connectedUserIds, true);
     }
 }
