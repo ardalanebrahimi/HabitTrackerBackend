@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
+using System.Collections.Generic;
 
 [Authorize]
 [ApiController]
@@ -35,13 +36,11 @@ public class HabitsController : ControllerBase
         return CreatedAtAction(nameof(GetTodayHabits), new { id = newHabit.Id }, newHabit);
     }
 
-
-
     [HttpGet("today")]
     public async Task<ActionResult<IEnumerable<HabitWithProgressDTO>>> GetTodayHabits()
     {
         var userId = GetUserId();
-        return await _habitService.GetTodayHabits(userId);
+        return await _habitService.GetTodayHabits(new List<Guid> { userId });
     }
 
     [HttpGet("all")]
@@ -123,5 +122,11 @@ public class HabitsController : ControllerBase
         return Ok(habit);
     }
 
-
+    // ✅ Get Friends' Habits
+    [HttpGet("friends")]
+    public async Task<ActionResult<IEnumerable<HabitWithProgressDTO>>> GetFriendsHabits()
+    {
+        var userId = GetUserId();
+        return await _habitService.GetFriendsHabits(userId);
+    }
 }

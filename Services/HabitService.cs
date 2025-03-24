@@ -78,14 +78,14 @@ public class HabitService
         }).ToList();
     }
 
-    public async Task<List<HabitWithProgressDTO>> GetTodayHabits(Guid userId)
+    public async Task<List<HabitWithProgressDTO>> GetTodayHabits(List<Guid> userIds)
     {
         var today = DateTime.UtcNow;
         var currentWeekKey = GetPeriodKey("weekly", today);  // Get the current week identifier
         var currentMonthKey = GetPeriodKey("monthly", today); // Get the current month identifier
 
         var habits = await _context.Habits
-            .Where(h => h.UserId == userId && !h.IsArchived) // ✅ Exclude archived habits
+            .Where(h => userIds.Contains(h.UserId) && !h.IsArchived) // ✅ Exclude archived habits
             .ToListAsync();
 
         return habits
@@ -469,5 +469,17 @@ public class HabitService
             IsCompleted = IsHabitCompleted(habit.Id ?? Guid.Empty, habit.Frequency, today),
             RecentLogs = recentLogs
         };
+    }
+
+    public async Task<List<HabitWithProgressDTO>> GetFriendsHabits(Guid userId)
+    {
+        // Get all connected friends' IDs
+        var connectedUserIds = await _context.Connections
+            .Where(c => c.UserId == userId && c.Status == ConnectionStatus.Approved)
+            .Select(c => c.ConnectedUserId)
+            .ToListAsync();
+
+        // Get today's habits for all connected friends
+        return await GetTodayHabits(connectedUserIds);
     }
 }
