@@ -9,7 +9,7 @@ public class HabitCheckRequest
     public Guid Id { get; set; }
 
     [Column("habit_id")]
-    public Guid HabitId { get; set; }
+    public Guid? HabitId { get; set; }
 
     [Column("requester_id")]
     public Guid RequesterId { get; set; }

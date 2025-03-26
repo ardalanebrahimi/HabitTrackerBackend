@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using System.Globalization;
 
 public class HabitService
@@ -78,16 +79,11 @@ public class HabitService
         }).ToList();
     }
 
-    public async Task<List<HabitWithProgressDTO>> GetTodayHabits(List<Guid> userIds, bool IsFriendsHabit = false)
+    public async Task<List<HabitWithProgressDTO>> GetTodayHabits(List<Habit> habits)
     {
         var today = DateTime.UtcNow;
         var currentWeekKey = GetPeriodKey("weekly", today);  // Get the current week identifier
         var currentMonthKey = GetPeriodKey("monthly", today); // Get the current month identifier
-
-        var habits = await _context.Habits
-            .Where(h => userIds.Contains(h.UserId) && !h.IsArchived) // ✅ Exclude archived habits
-            .Include(h => h.User) // Include the User entity
-            .ToListAsync();
 
         return habits
             .Where(h => !HasReachedCompletion(h.Id, h.StreakTarget, h.EndDate) && 
@@ -106,8 +102,7 @@ public class HabitService
                 Streak = CalculateStreak(h.Id ?? Guid.Empty, h.Frequency, today),
                 IsCompleted = IsHabitCompleted(h.Id ?? Guid.Empty, h.Frequency, today),
                 UserId = h.UserId,
-                UserName = h.User.UserName,
-                IsFriendsHabit = IsFriendsHabit,
+                UserName = h.User.UserName
             })
             .ToList();
     }
@@ -483,7 +478,61 @@ public class HabitService
             .Select(c => c.ConnectedUserId)
             .ToListAsync();
 
+        var habits = await _context.Habits
+            .Where(h => connectedUserIds.Contains(h.UserId) && !h.IsArchived) // ✅ Exclude archived habits
+            .Include(h => h.User) // Include the User entity
+            .ToListAsync();
+
         // Get today's habits for all connected friends
-        return await GetTodayHabits(connectedUserIds, true);
+        var todaysFriendsHabits = await GetTodayHabits(habits);
+        return todaysFriendsHabits.Select(h =>
+        {
+            h.IsFriendsHabit = true;
+            h.CanManageProgress = false;
+            return h;
+        }).ToList();
+    }
+
+    internal async Task<ActionResult<IEnumerable<HabitWithProgressDTO>>> GetAllTodayHabitsToManage(Guid userId)
+    {
+        List<HabitWithProgressDTO> todaysOwnedHabits = await GetAllOwnedTodaysHabit(userId);
+        List<HabitWithProgressDTO> todaysFriendsHabits = await GetAllFriendsHabitsToManage(userId);
+        return todaysOwnedHabits.Concat(todaysFriendsHabits).ToList();
+    }
+
+    private async Task<List<HabitWithProgressDTO>> GetAllOwnedTodaysHabit(Guid userId)
+    {
+        var habits = await _context.Habits
+            .Where(h => userId == h.UserId && !h.IsArchived) // ✅ Exclude archived habits
+            .Include(h => h.User) // Include the User entity
+            .ToListAsync();
+
+        var todaysHabits = await this.GetTodayHabits(habits);
+        return todaysHabits.Select(h =>
+        {
+            h.CanManageProgress = true;
+            return h;
+        }).ToList();
+    }
+
+    private async Task<List<HabitWithProgressDTO>> GetAllFriendsHabitsToManage(Guid userId)
+    {
+
+        var checkRequests = await _context.HabitCheckRequests
+            .Where(r => r.RequestedUserId == userId /*&& r.Status == CheckRequestStatus.Pending*/)
+            .Select(r=> r.HabitId)
+            .ToListAsync();
+        var habits = await _context.Habits
+            .Where(h => checkRequests.Contains(h.Id) && !h.IsArchived) // ✅ Exclude archived habits
+            .Include(h => h.User) // Include the User entity
+            .ToListAsync();
+
+        var todaysFriendsHabitsToManage = await this.GetTodayHabits(habits);
+        return todaysFriendsHabitsToManage.Select(h =>
+        {
+            h.IsFriendsHabit = true;
+            h.CanManageProgress = true;
+            return h;
+        }).ToList();
     }
 }

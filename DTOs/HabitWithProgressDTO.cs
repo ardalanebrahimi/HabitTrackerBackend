@@ -19,4 +19,5 @@ public class HabitWithProgressDTO
     public Guid UserId { get; set; }
     public string UserName { get; set; }
     public bool IsFriendsHabit { get; set; }
+    public bool CanManageProgress { get; set; }
 }

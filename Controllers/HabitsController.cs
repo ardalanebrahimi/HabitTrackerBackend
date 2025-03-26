@@ -40,7 +40,7 @@ public class HabitsController : ControllerBase
     public async Task<ActionResult<IEnumerable<HabitWithProgressDTO>>> GetTodayHabits()
     {
         var userId = GetUserId();
-        return await _habitService.GetTodayHabits(new List<Guid> { userId });
+        return await _habitService.GetAllTodayHabitsToManage(userId);
     }
 
     [HttpGet("all")]
