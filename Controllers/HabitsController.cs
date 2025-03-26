@@ -53,8 +53,7 @@ public class HabitsController : ControllerBase
     [HttpPost("{id}/complete")]
     public async Task<IActionResult> CompleteHabit(Guid id, [FromBody] HabitCompletionRequest request)
     {
-        var userId = GetUserId();
-        await _habitService.UpdateHabitProgress(userId, id, request.Decrease);
+        await _habitService.UpdateHabitProgress(id, request.Decrease);
         return Ok();
     }
 
@@ -111,8 +110,7 @@ public class HabitsController : ControllerBase
     [HttpGet("{id}")]
     public async Task<ActionResult<HabitWithProgressDTO>> GetHabitById(Guid id)
     {
-        var userId = GetUserId();
-        var habit = await _habitService.GetHabitById(userId, id);
+        var habit = await _habitService.GetHabitById(id);
 
         if (habit == null)
         {

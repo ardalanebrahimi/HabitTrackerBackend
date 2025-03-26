@@ -144,10 +144,10 @@ public class HabitService
         return progress < target || DateTime.UtcNow.Day < DateTime.DaysInMonth(DateTime.UtcNow.Year, DateTime.UtcNow.Month);
     }
 
-    public async Task UpdateHabitProgress(Guid userId, Guid habitId, bool decrease)
+    public async Task UpdateHabitProgress(Guid habitId, bool decrease)
     {
         var habit = await _context.Habits
-            .FirstOrDefaultAsync(h => h.Id == habitId && h.UserId == userId);
+            .FirstOrDefaultAsync(h => h.Id == habitId);
 
         if (habit == null)
             throw new ArgumentException("Habit not found.");
@@ -441,10 +441,10 @@ public class HabitService
             .ToListAsync();
     }
 
-    public async Task<HabitWithProgressDTO?> GetHabitById(Guid userId, Guid habitId)
+    public async Task<HabitWithProgressDTO?> GetHabitById(Guid habitId)
     {
         var habit = await _context.Habits
-            .Where(h => h.Id == habitId && h.UserId == userId)
+            .Where(h => h.Id == habitId)
             .FirstOrDefaultAsync();
 
         if (habit == null) return null;
