@@ -110,7 +110,8 @@ public class HabitsController : ControllerBase
     [HttpGet("{id}")]
     public async Task<ActionResult<HabitWithProgressDTO>> GetHabitById(Guid id)
     {
-        var habit = await _habitService.GetHabitById(id);
+        var userId = GetUserId();
+        var habit = await _habitService.GetHabitById(userId, id);
 
         if (habit == null)
         {

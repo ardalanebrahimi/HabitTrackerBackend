@@ -441,10 +441,11 @@ public class HabitService
             .ToListAsync();
     }
 
-    public async Task<HabitWithProgressDTO?> GetHabitById(Guid habitId)
+    public async Task<HabitWithProgressDTO?> GetHabitById(Guid userId, Guid habitId)
     {
         var habit = await _context.Habits
             .Where(h => h.Id == habitId)
+            .Include(h => h.User) // Include the User entity
             .FirstOrDefaultAsync();
 
         if (habit == null) return null;
@@ -466,7 +467,10 @@ public class HabitService
             CurrentValue = GetCurrentProgress(habit.Id ?? Guid.Empty, habit.Frequency, today),
             Streak = CalculateStreak(habit.Id ?? Guid.Empty, habit.Frequency, today),
             IsCompleted = IsHabitCompleted(habit.Id ?? Guid.Empty, habit.Frequency, today),
-            RecentLogs = recentLogs
+            RecentLogs = recentLogs,
+            UserId = habit.UserId,
+            UserName = habit.User.UserName,
+            IsFriendsHabit = habit.UserId != userId
         };
     }
 
