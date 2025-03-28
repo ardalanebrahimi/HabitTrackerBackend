@@ -33,12 +33,17 @@ public class UserController : ControllerBase
         // Hash the password
         string passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
 
+        // Generate a refresh token
+        var refreshToken = GenerateRefreshToken();
+
         // Create and save the new user
         var newUser = new User
         {
             UserName = request.UserName,
             Email = request.Email,
-            PasswordHash = passwordHash
+            PasswordHash = passwordHash,
+            RefreshToken = refreshToken,
+            RefreshTokenExpiryTime = DateTime.UtcNow.AddMonths(6) // Set the refresh token expiry time
         };
 
         _context.Users.Add(newUser);
