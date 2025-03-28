@@ -470,7 +470,7 @@ public class HabitService
             RecentLogs = recentLogs,
             UserId = habit.UserId,
             UserName = habit.User.UserName,
-            IsFriendsHabit = habit.UserId != userId
+            isOwnedHabit = habit.UserId == userId
         };
     }
 
@@ -491,7 +491,7 @@ public class HabitService
         var todaysFriendsHabits = await GetTodayHabits(habits);
         return todaysFriendsHabits.Select(h =>
         {
-            h.IsFriendsHabit = true;
+            h.isOwnedHabit = false;
             h.CanManageProgress = false;
             return h;
         }).ToList();
@@ -515,6 +515,7 @@ public class HabitService
         return todaysHabits.Select(h =>
         {
             h.CanManageProgress = true;
+            h.isOwnedHabit = true;
             return h;
         }).ToList();
     }
@@ -534,7 +535,7 @@ public class HabitService
         var todaysFriendsHabitsToManage = await this.GetTodayHabits(habits);
         return todaysFriendsHabitsToManage.Select(h =>
         {
-            h.IsFriendsHabit = true;
+            h.isOwnedHabit = false;
             h.CanManageProgress = true;
             return h;
         }).ToList();
@@ -559,7 +560,7 @@ public class HabitService
         var todaysFriendsHabitsToManage = await this.GetTodayHabits(habits);
         return todaysFriendsHabitsToManage.Select(h =>
         {
-            h.IsFriendsHabit = false;
+            h.isOwnedHabit = false;
             h.CanManageProgress = false;
             return h;
         }).ToList();

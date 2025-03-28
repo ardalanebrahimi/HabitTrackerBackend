@@ -136,5 +136,4 @@ public class HabitsController : ControllerBase
         var habits = await _habitService.GetPublicHabits(userId, pageNumber, pageSize);
         return Ok(habits);
     }
-
 }
