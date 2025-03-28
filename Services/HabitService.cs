@@ -539,4 +539,29 @@ public class HabitService
             return h;
         }).ToList();
     }
+
+    public async Task<List<HabitWithProgressDTO>> GetPublicHabits(Guid userId, int pageNumber, int pageSize)
+    {
+        // Get all connected friends' IDs
+        var connectedUserIds = await _context.Connections
+            .Where(c => c.UserId == userId && c.Status == ConnectionStatus.Approved)
+            .Select(c => c.ConnectedUserId)
+            .ToListAsync();
+
+        var habits = await _context.Habits
+            .Where(h => h.UserId != userId && !connectedUserIds.Contains(h.UserId) && !h.IsArchived)
+            .Include(h => h.User) // Include the User entity
+            .OrderByDescending(h => h.CreatedAt)
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        var todaysFriendsHabitsToManage = await this.GetTodayHabits(habits);
+        return todaysFriendsHabitsToManage.Select(h =>
+        {
+            h.IsFriendsHabit = false;
+            h.CanManageProgress = false;
+            return h;
+        }).ToList();
+    }
 }

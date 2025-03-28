@@ -128,4 +128,13 @@ public class HabitsController : ControllerBase
         var userId = GetUserId();
         return await _habitService.GetFriendsHabits(userId);
     }
+
+    [HttpGet("public")]
+    public async Task<ActionResult<IEnumerable<HabitWithProgressDTO>>> GetPublicHabits([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
+    {
+        var userId = GetUserId();
+        var habits = await _habitService.GetPublicHabits(userId, pageNumber, pageSize);
+        return Ok(habits);
+    }
+
 }
