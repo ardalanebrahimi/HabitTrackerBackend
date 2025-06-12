@@ -22,17 +22,14 @@ public class ConnectionController : ControllerBase
     public ConnectionController(AppDbContext context)
     {
         _context = context;
-    }
-
-    // ✅ Get List of Approved Connections
+    }    // ✅ Get List of Approved Connections
     [HttpGet("list")]
     public async Task<IActionResult> GetConnections()
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (userId == null) return Unauthorized();
+        var userId = GetUserId();
 
         var connections = await _context.Connections
-            .Where(c => c.UserId == Guid.Parse(userId) && c.Status == ConnectionStatus.Approved)
+            .Where(c => c.UserId == userId && c.Status == ConnectionStatus.Approved)
             .Select(c => c.ConnectedUserId)
             .ToListAsync();
 
@@ -80,9 +77,7 @@ public class ConnectionController : ControllerBase
         if (existingConnection != null)
         {
             return BadRequest(new { message = "You already have a connection or pending request." });
-        }
-
-        var requester = await _context.Users.FindAsync(GetUserId());
+        }        var requester = await _context.Users.FindAsync(GetUserId());
         var newConnection = new Connection
         {
             Id = Guid.NewGuid(),
@@ -99,7 +94,7 @@ public class ConnectionController : ControllerBase
             UserId = request.ConnectedUserId,
             Type = NotificationType.ConnectionRequest,
             Title = "New Connection Request",
-            Message = $"{requester.UserName} wants to connect with you",
+            Message = $"{requester?.UserName ?? "Someone"} wants to connect with you",
             Data = JsonSerializer.Serialize(new { ConnectionId = newConnection.Id }),
             IsRead = false,
             CreatedAt = DateTime.UtcNow
@@ -112,12 +107,59 @@ public class ConnectionController : ControllerBase
         return Ok(new { message = "Connection request sent." });
     }
 
-    // ✅ Get Incoming Requests
+    // ✅ Send Connection Request by UserId (alternative endpoint for frontend compatibility)
+    [HttpPost("request/{userId}")]
+    public async Task<IActionResult> SendConnectionRequestByUserId(Guid userId)
+    {
+        if (userId == GetUserId())
+        {
+            return BadRequest(new { message = "You cannot send a request to yourself." });
+        }
+
+        var existingConnection = await _context.Connections
+            .FirstOrDefaultAsync(c =>
+                ((c.UserId == GetUserId() && c.ConnectedUserId == userId) ||
+                (c.UserId == userId && c.ConnectedUserId == GetUserId()))
+                && c.Status != ConnectionStatus.Rejected);
+
+        if (existingConnection != null)
+        {
+            return BadRequest(new { message = "You already have a connection or pending request." });
+        }
+
+        var requester = await _context.Users.FindAsync(GetUserId());
+        var newConnection = new Connection
+        {
+            Id = Guid.NewGuid(),
+            UserId = GetUserId(),
+            ConnectedUserId = userId,
+            Status = ConnectionStatus.Pending,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        // Create notification for the recipient
+        var notification = new Notification
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            Type = NotificationType.ConnectionRequest,
+            Title = "New Connection Request",
+            Message = $"{requester!.UserName} wants to connect with you",
+            Data = JsonSerializer.Serialize(new { ConnectionId = newConnection.Id }),
+            IsRead = false,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _context.Connections.Add(newConnection);
+        _context.Notifications.Add(notification);
+        await _context.SaveChangesAsync();
+
+        return Ok(new { message = "Connection request sent." });
+    }    // ✅ Get Incoming Requests
     [HttpGet("incoming")]
     public async Task<IActionResult> GetIncomingRequests()
     {
         var userId = GetUserId();
-        if (userId == null) return Unauthorized();
 
         var requests = await _context.Connections
             .Where(c => c.ConnectedUserId == userId && c.Status == ConnectionStatus.Pending)
@@ -128,12 +170,11 @@ public class ConnectionController : ControllerBase
         return Ok(requests);
     }
 
-    // ✅ Get Sent Requests
+    // ✅ Get Sent Requests    [HttpGet("sent")]
     [HttpGet("sent")]
     public async Task<IActionResult> GetSentRequests()
     {
         var userId = GetUserId();
-        if (userId == null) return Unauthorized();
 
         var requests = await _context.Connections
             .Where(c => c.UserId == userId && c.Status == ConnectionStatus.Pending)
@@ -230,15 +271,13 @@ public class ConnectionController : ControllerBase
                 RequestedUserId = Guid.Parse(requestedUserId),
                 Status = CheckRequestStatus.Pending,
                 CreatedAt = DateTime.UtcNow
-            };
-
-            var notification = new Notification
+            };            var notification = new Notification
             {
                 Id = Guid.NewGuid(),
                 UserId = Guid.Parse(requestedUserId),
                 Type = NotificationType.HabitCheckRequest,
                 Title = "New Habit Check Request",
-                Message = $"{requester.UserName} asked you to verify their habit progress",
+                Message = $"{requester?.UserName ?? "Someone"} asked you to verify their habit progress",
                 Data = JsonSerializer.Serialize(new { 
                     HabitCheckRequestId = checkRequest.Id,
                     HabitId = habit.Id,
@@ -273,5 +312,5 @@ public class ConnectionRequest
 public class HabitCheckRequestDTO
 {
     public Guid HabitId { get; set; }
-    public string[] UserIds { get; set; }
+    public required string[] UserIds { get; set; }
 }

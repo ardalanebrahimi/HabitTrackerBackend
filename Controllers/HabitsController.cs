@@ -57,6 +57,13 @@ public class HabitsController : ControllerBase
         return Ok();
     }
 
+    [HttpPut("{id}/progress")]
+    public async Task<IActionResult> UpdateHabitProgress(Guid id, [FromBody] HabitCompletionRequest request)
+    {
+        await _habitService.UpdateHabitProgress(id, request.Decrease);
+        return Ok();
+    }
+
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteHabit(Guid id)
     {

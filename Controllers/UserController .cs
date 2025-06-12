@@ -120,10 +120,71 @@ public class UserController : ControllerBase
         return Ok(new { message = "Logout successful" });
     }
 
-    private string GenerateJwtToken(User user)
+    [HttpGet("profile")]
+    public async Task<IActionResult> GetProfile()
+    {
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (userId == null) return Unauthorized();
+
+        var user = await _context.Users.FindAsync(Guid.Parse(userId));
+        if (user == null) return NotFound();
+
+        return Ok(new { 
+            Id = user.Id,
+            UserName = user.UserName,
+            Email = user.Email
+        });
+    }
+
+    [HttpPut("profile")]
+    public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request)
+    {
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (userId == null) return Unauthorized();
+
+        var user = await _context.Users.FindAsync(Guid.Parse(userId));
+        if (user == null) return NotFound();
+
+        // Check if the new email is already taken by another user
+        if (!string.IsNullOrEmpty(request.Email) && request.Email != user.Email)
+        {
+            var emailExists = await _context.Users.AnyAsync(u => u.Email == request.Email && u.Id != user.Id);
+            if (emailExists)
+            {
+                return BadRequest(new { message = "Email already exists." });
+            }
+            user.Email = request.Email;
+        }
+
+        // Check if the new username is already taken by another user
+        if (!string.IsNullOrEmpty(request.UserName) && request.UserName != user.UserName)
+        {
+            var usernameExists = await _context.Users.AnyAsync(u => u.UserName == request.UserName && u.Id != user.Id);
+            if (usernameExists)
+            {
+                return BadRequest(new { message = "Username already exists." });
+            }
+            user.UserName = request.UserName;
+        }
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new { 
+            message = "Profile updated successfully",
+            user = new {
+                Id = user.Id,
+                UserName = user.UserName,
+                Email = user.Email
+            }
+        });
+    }    private string GenerateJwtToken(User user)
     {
         var jwtKey = _configuration["Jwt:Key"];
         var jwtIssuer = _configuration["Jwt:Issuer"];
+        
+        if (string.IsNullOrEmpty(jwtKey) || string.IsNullOrEmpty(jwtIssuer))
+            throw new InvalidOperationException("JWT configuration is missing");
+
         var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
         var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
@@ -131,7 +192,7 @@ public class UserController : ControllerBase
         {
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            new Claim(ClaimTypes.Email, user.Email)
+            new Claim(ClaimTypes.Email, user.Email ?? "")
         };
 
         var token = new JwtSecurityToken(
@@ -157,11 +218,11 @@ public class UserController : ControllerBase
 }
 public class UserLoginRequest
 {
-    public string Email { get; set; }
-    public string Password { get; set; }
+    public required string Email { get; set; }
+    public required string Password { get; set; }
 }
 
 public class RefreshTokenRequest
 {
-    public string RefreshToken { get; set; }
+    public required string RefreshToken { get; set; }
 }

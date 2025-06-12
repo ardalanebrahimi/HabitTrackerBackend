@@ -12,13 +12,11 @@ public class Notification
     public Guid UserId { get; set; }
 
     [Column("type")]
-    public NotificationType Type { get; set; }
-
-    [Column("title")]
-    public string Title { get; set; }
+    public NotificationType Type { get; set; }    [Column("title")]
+    public required string Title { get; set; }
 
     [Column("message")]
-    public string Message { get; set; }
+    public required string Message { get; set; }
 
     [Column("data")]
     public string? Data { get; set; }
@@ -27,15 +25,15 @@ public class Notification
     public bool IsRead { get; set; }
 
     [Column("created_at")]
-    public DateTime CreatedAt { get; set; }
-
-    [ForeignKey("UserId")]
-    public virtual User User { get; set; }
+    public DateTime CreatedAt { get; set; }    [ForeignKey("UserId")]
+    public virtual User User { get; set; } = null!;
 }
 
 public enum NotificationType
 {
     ConnectionRequest,
     HabitCheckRequest,
-    ProgressUpdate
-} 
+    ProgressUpdate,
+    CheerReceived,
+    CheerSent
+}

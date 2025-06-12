@@ -1,0 +1,238 @@
+# Habit Tracker Backend API Test File
+# Complete test of all implemented endpoints
+
+### User Registration and Authentication
+
+# Register a new user
+POST http://localhost:5000/api/user/register
+Content-Type: application/json
+
+{
+  "userName": "testuser",
+  "email": "test@example.com",
+  "password": "Password123!"
+}
+
+### Login
+POST http://localhost:5000/api/user/login
+Content-Type: application/json
+
+{
+  "email": "test@example.com",
+  "password": "Password123!"
+}
+
+### Get User Profile (requires auth token)
+GET http://localhost:5000/api/user/profile
+Authorization: Bearer {{accessToken}}
+
+### Update User Profile (requires auth token)
+PUT http://localhost:5000/api/user/profile
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "userName": "updateduser",
+  "email": "updated@example.com"
+}
+
+### Habits Management
+
+# Create a new habit
+POST http://localhost:5000/api/habits
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "name": "Daily Exercise",
+  "description": "30 minutes of cardio",
+  "frequency": "daily",
+  "goalType": "binary",
+  "targetType": "ongoing"
+}
+
+# Get all habits
+GET http://localhost:5000/api/habits/all
+Authorization: Bearer {{accessToken}}
+
+# Get today's habits
+GET http://localhost:5000/api/habits/today
+Authorization: Bearer {{accessToken}}
+
+# Get active habits
+GET http://localhost:5000/api/habits/active
+Authorization: Bearer {{accessToken}}
+
+# Get archived habits
+GET http://localhost:5000/api/habits/archived
+Authorization: Bearer {{accessToken}}
+
+# Get friends' habits
+GET http://localhost:5000/api/habits/friends
+Authorization: Bearer {{accessToken}}
+
+# Get public habits (with pagination)
+GET http://localhost:5000/api/habits/public?pageNumber=1&pageSize=10
+Authorization: Bearer {{accessToken}}
+
+# Get specific habit by ID
+GET http://localhost:5000/api/habits/{{habitId}}
+Authorization: Bearer {{accessToken}}
+
+# Update habit
+PUT http://localhost:5000/api/habits/{{habitId}}
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "name": "Updated Exercise",
+  "description": "45 minutes of cardio",
+  "frequency": "daily",
+  "goalType": "binary",
+  "targetType": "ongoing"
+}
+
+# Complete habit
+POST http://localhost:5000/api/habits/{{habitId}}/complete
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "decrease": false
+}
+
+# Update habit progress
+PUT http://localhost:5000/api/habits/{{habitId}}/progress
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "decrease": false
+}
+
+# Archive habit
+PUT http://localhost:5000/api/habits/{{habitId}}/archive
+Authorization: Bearer {{accessToken}}
+
+# Delete habit
+DELETE http://localhost:5000/api/habits/{{habitId}}
+Authorization: Bearer {{accessToken}}
+
+### Connections (Friends) Management
+
+# Search users by username
+GET http://localhost:5000/api/connection/search?username=testuser
+Authorization: Bearer {{accessToken}}
+
+# Send connection request (body method)
+POST http://localhost:5000/api/connection/request
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "connectedUserId": "{{friendUserId}}"
+}
+
+# Send connection request (URL parameter method)
+POST http://localhost:5000/api/connection/request/{{friendUserId}}
+Authorization: Bearer {{accessToken}}
+
+# Get connection list (approved friends)
+GET http://localhost:5000/api/connection/list
+Authorization: Bearer {{accessToken}}
+
+# Get incoming connection requests
+GET http://localhost:5000/api/connection/incoming
+Authorization: Bearer {{accessToken}}
+
+# Get sent connection requests
+GET http://localhost:5000/api/connection/sent
+Authorization: Bearer {{accessToken}}
+
+# Accept connection request
+POST http://localhost:5000/api/connection/accept/{{requestId}}
+Authorization: Bearer {{accessToken}}
+
+# Reject connection request
+POST http://localhost:5000/api/connection/reject/{{requestId}}
+Authorization: Bearer {{accessToken}}
+
+# Request habit check from friends
+POST http://localhost:5000/api/connection/check-request
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "habitId": "{{habitId}}",
+  "userIds": ["{{friendUserId1}}", "{{friendUserId2}}"]
+}
+
+### Cheering System (NEW!)
+
+# Send cheer to friend
+POST http://localhost:5000/api/cheer
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "habitId": "{{habitId}}",
+  "toUserId": "{{friendUserId}}",
+  "emoji": "🎉",
+  "message": "Great job on your habit!"
+}
+
+# Get cheers for specific habit
+GET http://localhost:5000/api/cheer/habit/{{habitId}}
+Authorization: Bearer {{accessToken}}
+
+# Get received cheers
+GET http://localhost:5000/api/cheer/received
+Authorization: Bearer {{accessToken}}
+
+# Get sent cheers
+GET http://localhost:5000/api/cheer/sent
+Authorization: Bearer {{accessToken}}
+
+# Get cheer statistics
+GET http://localhost:5000/api/cheer/summary
+Authorization: Bearer {{accessToken}}
+
+# Delete cheer (optional)
+DELETE http://localhost:5000/api/cheer/{{cheerId}}
+Authorization: Bearer {{accessToken}}
+
+### Notifications Management
+
+# Get all notifications
+GET http://localhost:5000/api/notification
+Authorization: Bearer {{accessToken}}
+
+# Get unread count
+GET http://localhost:5000/api/notification/unread-count
+Authorization: Bearer {{accessToken}}
+
+# Mark notification as read
+PUT http://localhost:5000/api/notification/{{notificationId}}/read
+Authorization: Bearer {{accessToken}}
+
+# Mark all notifications as read
+PUT http://localhost:5000/api/notification/read-all
+Authorization: Bearer {{accessToken}}
+
+# Delete notification
+DELETE http://localhost:5000/api/notification/{{notificationId}}
+Authorization: Bearer {{accessToken}}
+
+### Token Management
+
+# Refresh access token
+POST http://localhost:5000/api/user/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{refreshToken}}"
+}
+
+# Logout
+POST http://localhost:5000/api/user/logout
+Authorization: Bearer {{accessToken}}

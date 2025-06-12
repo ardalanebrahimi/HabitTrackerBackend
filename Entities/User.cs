@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations;
 using System;
 using Microsoft.AspNetCore.Identity;
 
-[Table("user")]
+[Table("users")]
 public class User : IdentityUser<Guid>
 {
     [Key]
