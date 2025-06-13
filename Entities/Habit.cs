@@ -26,11 +26,10 @@ public class Habit
 
     [Required]
     [ForeignKey("User")]
-    public Guid UserId { get; set; }
-
-    public virtual User User { get; set; } = null!;
+    public Guid UserId { get; set; }    public virtual User User { get; set; } = null!;
 
     public bool IsArchived { get; set; } = false;
+    public bool IsPrivate { get; set; } = false; // Privacy setting for the habit
 
     public List<HabitLog> Logs { get; set; } = new List<HabitLog>();
 }

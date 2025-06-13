@@ -7,8 +7,7 @@ public class AppDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
     public new DbSet<User> Users { get; set; }
-    public DbSet<Habit> Habits { get; set; }
-    public DbSet<HabitLog> HabitLogs { get; set; }
+    public DbSet<Habit> Habits { get; set; }    public DbSet<HabitLog> HabitLogs { get; set; }
     public DbSet<Connection> Connections { get; set; }
     public DbSet<HabitCheckRequest> HabitCheckRequests { get; set; }
     public DbSet<Notification> Notifications { get; set; }
@@ -23,13 +22,6 @@ public class AppDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
         modelBuilder.Entity<Connection>().ToTable("connections");
         modelBuilder.Entity<Notification>().ToTable("notifications");
         modelBuilder.Entity<Cheer>().ToTable("cheers");
-
-        // Ensure Habit-Log Relationship
-        modelBuilder.Entity<Habit>()
-            .HasMany(h => h.Logs)
-            .WithOne()
-            .HasForeignKey(l => l.HabitId);
-
 
         modelBuilder.Entity<Connection>()
             .HasOne(uc => uc.RequesterUser)
@@ -52,12 +44,16 @@ public class AppDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
             .HasOne(c => c.FromUser)
             .WithMany()
             .HasForeignKey(c => c.FromUserId)
-            .OnDelete(DeleteBehavior.Restrict);
-
-        modelBuilder.Entity<Cheer>()
+            .OnDelete(DeleteBehavior.Restrict);        modelBuilder.Entity<Cheer>()
             .HasOne(c => c.ToUser)
             .WithMany()
             .HasForeignKey(c => c.ToUserId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        // Ensure Habit-Log Relationship
+        modelBuilder.Entity<Habit>()
+            .HasMany(h => h.Logs)
+            .WithOne()
+            .HasForeignKey(l => l.HabitId);
     }
 }

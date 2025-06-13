@@ -192,9 +192,7 @@ public class HabitService
         };
 
         return query.Sum(l => l.Value);
-    }
-
-    private int CalculateStreak(Guid habitId, string frequency, DateTime now)
+    }    public int CalculateStreak(Guid habitId, string frequency, DateTime now)
     {
         var habit = _context.Habits.FirstOrDefault(h => h.Id == habitId);
         if (habit == null) return 0;
@@ -274,10 +272,7 @@ public class HabitService
             _ => throw new ArgumentException("Invalid frequency")
         };
     }
-
-
-    // ✅ Check if Habit is Completed
-    private bool IsHabitCompleted(Guid habitId, string frequency, DateTime now)
+    public bool IsHabitCompleted(Guid habitId, string frequency, DateTime now)
     {
         var periodKey = GetPeriodKey(frequency, now);
         var progress = GetCurrentProgress(habitId, frequency, now);
