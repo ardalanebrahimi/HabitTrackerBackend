@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
 
@@ -465,7 +465,8 @@ public class HabitService
             RecentLogs = recentLogs,
             UserId = habit.UserId,
             UserName = habit.User.UserName,
-            isOwnedHabit = habit.UserId == userId
+            isOwnedHabit = habit.UserId == userId,
+            CopyCount = habit.CopyCount
         };
     }
 
@@ -559,5 +560,70 @@ public class HabitService
             h.CanManageProgress = false;
             return h;
         }).ToList();
+    }
+
+    public async Task<HabitWithProgressDTO> CopyHabit(Guid userId, Guid habitId)
+    {
+        var originalHabit = await _context.Habits
+            .FirstOrDefaultAsync(h => h.Id == habitId);
+
+        if (originalHabit == null)
+            throw new ArgumentException("Habit not found.");
+
+        if (originalHabit.UserId == userId)
+            throw new InvalidOperationException("Cannot copy your own habit.");
+
+        if (originalHabit.IsPrivate)
+            throw new InvalidOperationException("Cannot copy a private habit.");
+
+        var copiedHabit = new Habit
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            Name = originalHabit.Name,
+            Description = originalHabit.Description,
+            Frequency = originalHabit.Frequency,
+            GoalType = originalHabit.GoalType,
+            TargetValue = originalHabit.TargetValue,
+            TargetType = originalHabit.TargetType,
+            StreakTarget = originalHabit.StreakTarget,
+            AllowedGaps = originalHabit.AllowedGaps,
+            StartDate = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _context.Habits.Add(copiedHabit);
+
+        var habitCopy = new HabitCopy
+        {
+            OriginalHabitId = habitId,
+            CopiedHabitId = copiedHabit.Id.Value,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _context.HabitCopies.Add(habitCopy);
+
+        // Increment the copy count of the original habit
+        originalHabit.CopyCount++;
+
+        await _context.SaveChangesAsync();
+
+        return new HabitWithProgressDTO
+        {
+            Id = copiedHabit.Id ?? Guid.Empty,
+            Name = copiedHabit.Name,
+            Description = copiedHabit.Description,
+            Frequency = copiedHabit.Frequency,
+            GoalType = copiedHabit.GoalType,
+            TargetValue = copiedHabit.TargetValue,
+            TargetType = copiedHabit.TargetType,
+            StreakTarget = copiedHabit.StreakTarget,
+            EndDate = copiedHabit.EndDate,
+            CurrentValue = 0,
+            Streak = 0,
+            IsCompleted = false,
+            isOwnedHabit = true,
+            CanManageProgress = true
+        };
     }
 }

@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
@@ -142,5 +142,24 @@ public class HabitsController : ControllerBase
         var userId = GetUserId();
         var habits = await _habitService.GetPublicHabits(userId, pageNumber, pageSize);
         return Ok(habits);
+    }
+
+    [HttpPost("{id}/copy")]
+    public async Task<ActionResult<HabitWithProgressDTO>> CopyHabit(Guid id)
+    {
+        try
+        {
+            var userId = GetUserId();
+            var copiedHabit = await _habitService.CopyHabit(userId, id);
+            return Ok(copiedHabit);
+        }
+        catch (ArgumentException ex)
+        {
+            return NotFound(ex.Message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
 }
