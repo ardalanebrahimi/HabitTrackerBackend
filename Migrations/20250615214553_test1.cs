@@ -1,29 +1,28 @@
-﻿using System;
-using Microsoft.EntityFrameworkCore.Migrations;
+﻿using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace HabitTrackerBackend.Migrations
 {
     /// <inheritdoc />
-    public partial class AddHabitUserColumn : Migration
+    public partial class test1 : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<Guid>(
-                name: "UserId",
+            migrationBuilder.AddColumn<int>(
+                name: "CopyCount2",
                 table: "habits",
-                type: "uuid",
+                type: "integer",
                 nullable: false,
-                defaultValue: new Guid("00000000-0000-0000-0000-000000000000"));
+                defaultValue: 0);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropColumn(
-                name: "UserId",
+                name: "CopyCount2",
                 table: "habits");
         }
     }

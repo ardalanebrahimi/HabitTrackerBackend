@@ -11,8 +11,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace HabitTrackerBackend.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20250213214202_addRefreshToken")]
-    partial class addRefreshToken
+    [Migration("20250615214553_test1")]
+    partial class test1
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -24,17 +24,101 @@ namespace HabitTrackerBackend.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Cheer", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Emoji")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("emoji");
+
+                    b.Property<Guid>("FromUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("from_user_id");
+
+                    b.Property<Guid>("HabitId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("habit_id");
+
+                    b.Property<string>("Message")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("message");
+
+                    b.Property<Guid>("ToUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("to_user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FromUserId");
+
+                    b.HasIndex("HabitId");
+
+                    b.HasIndex("ToUserId");
+
+                    b.ToTable("cheers", (string)null);
+                });
+
+            modelBuilder.Entity("Connection", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ConnectedUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConnectedUserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("connections", (string)null);
+                });
+
             modelBuilder.Entity("Habit", b =>
                 {
                     b.Property<Guid?>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<int>("AllowedGaps")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CopyCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CopyCount2")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("CurrentValue")
-                        .HasColumnType("integer");
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("EndDate")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Frequency")
                         .IsRequired()
@@ -44,12 +128,25 @@ namespace HabitTrackerBackend.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsPrivate")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<int>("Streak")
+                    b.Property<DateTime?>("StartDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("StreakTarget")
                         .HasColumnType("integer");
+
+                    b.Property<string>("TargetType")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<int?>("TargetValue")
                         .HasColumnType("integer");
@@ -59,7 +156,75 @@ namespace HabitTrackerBackend.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("UserId");
+
                     b.ToTable("habits");
+                });
+
+            modelBuilder.Entity("HabitCheckRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("HabitId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("habit_id");
+
+                    b.Property<Guid>("RequestedUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requested_user_id");
+
+                    b.Property<Guid>("RequesterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requester_id");
+
+                    b.Property<DateTime?>("RespondedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("responded_at");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HabitId");
+
+                    b.HasIndex("RequestedUserId");
+
+                    b.HasIndex("RequesterId");
+
+                    b.ToTable("habit_check_requests");
+                });
+
+            modelBuilder.Entity("HabitCopy", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CopiedHabitId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("OriginalHabitId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CopiedHabitId");
+
+                    b.HasIndex("OriginalHabitId");
+
+                    b.ToTable("habit_copies");
                 });
 
             modelBuilder.Entity("HabitLog", b =>
@@ -68,20 +233,32 @@ namespace HabitTrackerBackend.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<DateTime>("Date")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<int>("DailyKey")
+                        .HasColumnType("integer");
 
                     b.Property<Guid>("HabitId")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("MonthlyKey")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Target")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("Value")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("WeeklyKey")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
 
                     b.HasIndex("HabitId");
 
-                    b.ToTable("HabitLogs");
+                    b.ToTable("habit_logs");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole<System.Guid>", b =>
@@ -214,6 +391,50 @@ namespace HabitTrackerBackend.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("Notification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Data")
+                        .HasColumnType("text")
+                        .HasColumnName("data");
+
+                    b.Property<bool>("IsRead")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_read");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("message");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("title");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer")
+                        .HasColumnName("type");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("notifications", (string)null);
+                });
+
             modelBuilder.Entity("User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -293,6 +514,107 @@ namespace HabitTrackerBackend.Migrations
                     b.ToTable("users", (string)null);
                 });
 
+            modelBuilder.Entity("Cheer", b =>
+                {
+                    b.HasOne("User", "FromUser")
+                        .WithMany()
+                        .HasForeignKey("FromUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Habit", "Habit")
+                        .WithMany()
+                        .HasForeignKey("HabitId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("User", "ToUser")
+                        .WithMany()
+                        .HasForeignKey("ToUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("FromUser");
+
+                    b.Navigation("Habit");
+
+                    b.Navigation("ToUser");
+                });
+
+            modelBuilder.Entity("Connection", b =>
+                {
+                    b.HasOne("User", "ReceiverUser")
+                        .WithMany("ReceivedConnections")
+                        .HasForeignKey("ConnectedUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("User", "RequesterUser")
+                        .WithMany("SentConnections")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ReceiverUser");
+
+                    b.Navigation("RequesterUser");
+                });
+
+            modelBuilder.Entity("Habit", b =>
+                {
+                    b.HasOne("User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("HabitCheckRequest", b =>
+                {
+                    b.HasOne("Habit", "Habit")
+                        .WithMany()
+                        .HasForeignKey("HabitId");
+
+                    b.HasOne("User", "RequestedUser")
+                        .WithMany()
+                        .HasForeignKey("RequestedUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("User", "Requester")
+                        .WithMany()
+                        .HasForeignKey("RequesterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Habit");
+
+                    b.Navigation("RequestedUser");
+
+                    b.Navigation("Requester");
+                });
+
+            modelBuilder.Entity("HabitCopy", b =>
+                {
+                    b.HasOne("Habit", "CopiedHabit")
+                        .WithMany()
+                        .HasForeignKey("CopiedHabitId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Habit", "OriginalHabit")
+                        .WithMany()
+                        .HasForeignKey("OriginalHabitId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CopiedHabit");
+
+                    b.Navigation("OriginalHabit");
+                });
+
             modelBuilder.Entity("HabitLog", b =>
                 {
                     b.HasOne("Habit", null)
@@ -353,9 +675,27 @@ namespace HabitTrackerBackend.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Notification", b =>
+                {
+                    b.HasOne("User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Habit", b =>
                 {
                     b.Navigation("Logs");
+                });
+
+            modelBuilder.Entity("User", b =>
+                {
+                    b.Navigation("ReceivedConnections");
+
+                    b.Navigation("SentConnections");
                 });
 #pragma warning restore 612, 618
         }

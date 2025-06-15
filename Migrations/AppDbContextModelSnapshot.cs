@@ -102,6 +102,9 @@ namespace HabitTrackerBackend.Migrations
                     b.Property<int>("AllowedGaps")
                         .HasColumnType("integer");
 
+                    b.Property<int>("CopyCount")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -120,6 +123,9 @@ namespace HabitTrackerBackend.Migrations
                         .HasColumnType("text");
 
                     b.Property<bool>("IsArchived")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsPrivate")
                         .HasColumnType("boolean");
 
                     b.Property<string>("Name")
@@ -189,6 +195,30 @@ namespace HabitTrackerBackend.Migrations
                     b.HasIndex("RequesterId");
 
                     b.ToTable("habit_check_requests");
+                });
+
+            modelBuilder.Entity("HabitCopy", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CopiedHabitId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("OriginalHabitId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CopiedHabitId");
+
+                    b.HasIndex("OriginalHabitId");
+
+                    b.ToTable("habit_copies");
                 });
 
             modelBuilder.Entity("HabitLog", b =>
@@ -403,7 +433,8 @@ namespace HabitTrackerBackend.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
 
                     b.Property<int>("AccessFailedCount")
                         .HasColumnType("integer");
@@ -413,6 +444,7 @@ namespace HabitTrackerBackend.Migrations
                         .HasColumnType("text");
 
                     b.Property<string>("Email")
+                        .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)")
                         .HasColumnName("email");
@@ -435,6 +467,7 @@ namespace HabitTrackerBackend.Migrations
                         .HasColumnType("character varying(256)");
 
                     b.Property<string>("PasswordHash")
+                        .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("passwordhash");
 
@@ -445,6 +478,7 @@ namespace HabitTrackerBackend.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<string>("RefreshToken")
+                        .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<DateTime>("RefreshTokenExpiryTime")
@@ -457,6 +491,7 @@ namespace HabitTrackerBackend.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<string>("UserName")
+                        .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)")
                         .HasColumnName("name");
@@ -553,6 +588,25 @@ namespace HabitTrackerBackend.Migrations
                     b.Navigation("RequestedUser");
 
                     b.Navigation("Requester");
+                });
+
+            modelBuilder.Entity("HabitCopy", b =>
+                {
+                    b.HasOne("Habit", "CopiedHabit")
+                        .WithMany()
+                        .HasForeignKey("CopiedHabitId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Habit", "OriginalHabit")
+                        .WithMany()
+                        .HasForeignKey("OriginalHabitId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CopiedHabit");
+
+                    b.Navigation("OriginalHabit");
                 });
 
             modelBuilder.Entity("HabitLog", b =>

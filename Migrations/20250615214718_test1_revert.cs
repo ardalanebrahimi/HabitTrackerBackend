@@ -5,17 +5,13 @@
 namespace HabitTrackerBackend.Migrations
 {
     /// <inheritdoc />
-    public partial class removeHabitCalcColumns : Migration
+    public partial class test1_revert : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropColumn(
-                name: "CurrentValue",
-                table: "habits");
-
-            migrationBuilder.DropColumn(
-                name: "Streak",
+                name: "CopyCount2",
                 table: "habits");
         }
 
@@ -23,14 +19,7 @@ namespace HabitTrackerBackend.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.AddColumn<int>(
-                name: "CurrentValue",
-                table: "habits",
-                type: "integer",
-                nullable: false,
-                defaultValue: 0);
-
-            migrationBuilder.AddColumn<int>(
-                name: "Streak",
+                name: "CopyCount2",
                 table: "habits",
                 type: "integer",
                 nullable: false,
