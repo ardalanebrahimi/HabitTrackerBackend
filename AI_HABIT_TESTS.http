@@ -1,0 +1,63 @@
+# AI Habit Suggestion API Tests
+
+### 1. Test AI Service Status
+GET http://localhost:5000/api/ai/status
+Authorization: Bearer YOUR_JWT_TOKEN
+
+### 2. Generate AI Habit Suggestion - Health & Fitness
+POST http://localhost:5000/api/ai/habit-suggest
+Authorization: Bearer YOUR_JWT_TOKEN
+Content-Type: application/json
+
+{
+  "prompt": "I want to start exercising more regularly to improve my health"
+}
+
+### 3. Generate AI Habit Suggestion - Learning
+POST http://localhost:5000/api/ai/habit-suggest
+Authorization: Bearer YOUR_JWT_TOKEN
+Content-Type: application/json
+
+{
+  "prompt": "I want to read more books and improve my knowledge"
+}
+
+### 4. Generate AI Habit Suggestion - Productivity
+POST http://localhost:5000/api/ai/habit-suggest
+Authorization: Bearer YOUR_JWT_TOKEN
+Content-Type: application/json
+
+{
+  "prompt": "Help me build a morning routine to be more productive"
+}
+
+### 5. Generate AI Habit Suggestion - Wellness
+POST http://localhost:5000/api/ai/habit-suggest
+Authorization: Bearer YOUR_JWT_TOKEN
+Content-Type: application/json
+
+{
+  "prompt": "I need to reduce stress and improve my mental health"
+}
+
+### 6. Test with Empty Prompt (Should Fail Validation)
+POST http://localhost:5000/api/ai/habit-suggest
+Authorization: Bearer YOUR_JWT_TOKEN
+Content-Type: application/json
+
+{
+  "prompt": ""
+}
+
+### 7. Test with Long Prompt
+POST http://localhost:5000/api/ai/habit-suggest
+Authorization: Bearer YOUR_JWT_TOKEN
+Content-Type: application/json
+
+{
+  "prompt": "I want to develop a comprehensive habit that combines physical exercise, mental wellness, social interaction, creative expression, and personal development into a single daily routine that I can maintain consistently over the long term while balancing my work and family commitments and ensuring it fits into my busy schedule without overwhelming me or causing additional stress in my already packed daily routine"
+}
+
+### 8. Direct Integration Test - Generate AI Suggestion and Create Habit
+# Step 1: Generate AI suggestion
+POST http://localhost:5000/api/ai/habit-suggest

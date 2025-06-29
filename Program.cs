@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.OpenApi.Models;
 using System.Security.Claims;
+using HabitTrackerBackend.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -97,8 +98,9 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-builder.Services.AddScoped<HabitService>();                                                                                                                                                         
-
+// Register Services
+builder.Services.AddScoped<HabitService>();
+builder.Services.AddHttpClient<AiHabitSuggestionService>();
 
 // Build the Application
 var app = builder.Build();
