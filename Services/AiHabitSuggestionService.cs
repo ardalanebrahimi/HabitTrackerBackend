@@ -89,7 +89,7 @@ Guidelines:
                     throw new InvalidOperationException("No response from OpenAI");
                 }
 
-                var assistantMessage = apiResponse.Choices[0].Message.Content;
+                var assistantMessage = apiResponse.Choices[0].Message.Content ?? "";
                 _logger.LogInformation("Received response from OpenAI: {Response}", assistantMessage);
 
                 // Clean the response to extract just the JSON
@@ -125,6 +125,192 @@ Guidelines:
                 _logger.LogError(ex, "Error generating AI habit suggestion");
                 return CreateFallbackSuggestion(userPrompt);
             }
+        }
+
+        public async Task<List<AiHabitSuggestionResponse>> GenerateOnboardingHabitSuggestionsAsync(OnboardingRequest onboardingData)
+        {
+            try
+            {
+                var prompt = BuildOnboardingPrompt(onboardingData);
+                var systemPrompt = @"You are a habit-building expert who specializes in personalized onboarding. Based on the user's goals, struggles, and preferences, generate exactly 3 diverse habit suggestions that will help them build a sustainable habit routine.
+
+Respond with ONLY a valid JSON array of exactly 3 objects (no markdown, no additional text) in this exact format:
+[
+  {
+    ""name"": ""Specific habit name (max 50 chars)"",
+    ""description"": ""Detailed description explaining benefits (max 200 chars)"",
+    ""frequency"": ""daily"",
+    ""goalType"": ""binary"",
+    ""targetType"": ""ongoing"",
+    ""targetValue"": null,
+    ""streakTarget"": 7,
+    ""endDate"": null,
+    ""allowedGaps"": 1,
+    ""startDate"": null
+  },
+  ...two more similar objects...
+]
+
+Guidelines:
+- Suggest 3 different types of habits (e.g., physical, mental, productivity)
+- Match the user's available time and motivation level
+- Start with easier habits that build momentum
+- name: Short, action-oriented (e.g., ""10-minute morning walk"")
+- description: Clear explanation of what and why it helps their goals
+- frequency: Use ""daily"", ""weekly"", or ""monthly"" (lowercase)
+- goalType: Use ""binary"" for yes/no habits or ""numeric"" for count-based habits
+- targetType: Use ""ongoing"" for most habits, ""streak"" for streak-based, or ""endDate"" for time-limited
+- targetValue: Number for numeric goals, null for binary goals  
+- streakTarget: Target streak length (7-21 days for beginners)
+- allowedGaps: 1 for beginners, 0 for more strict habits";
+
+                var requestBody = new
+                {
+                    model = "gpt-3.5-turbo",
+                    messages = new[]
+                    {
+                        new { role = "system", content = systemPrompt },
+                        new { role = "user", content = prompt }
+                    },
+                    temperature = 0.7,
+                    max_tokens = 800
+                };
+
+                var json = JsonSerializer.Serialize(requestBody);
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                var response = await _httpClient.PostAsync("v1/chat/completions", content);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    _logger.LogError("OpenAI API error: {StatusCode} - {Error}", response.StatusCode, errorContent);
+                    throw new HttpRequestException($"OpenAI API returned {response.StatusCode}");
+                }
+
+                var responseContent = await response.Content.ReadAsStringAsync();
+                var apiResponse = JsonSerializer.Deserialize<OpenAIResponse>(responseContent, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+
+                if (apiResponse?.Choices?.Length == 0)
+                {
+                    throw new InvalidOperationException("No response from OpenAI");
+                }
+
+                var assistantMessage = apiResponse.Choices[0].Message.Content ?? "";
+                _logger.LogInformation("Received onboarding response from OpenAI: {Response}", assistantMessage);
+
+                // Clean the response to extract just the JSON array
+                var jsonSuggestions = ExtractJsonFromResponse(assistantMessage);
+                
+                var suggestions = JsonSerializer.Deserialize<List<AiHabitSuggestionResponse>>(jsonSuggestions, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+
+                if (suggestions == null || suggestions.Count == 0)
+                {
+                    throw new InvalidOperationException("Failed to parse AI response");
+                }
+
+                // Validate and sanitize each suggestion
+                foreach (var suggestion in suggestions)
+                {
+                    ValidateAndSanitizeSuggestion(suggestion);
+                }
+
+                // Ensure we have exactly 3 suggestions
+                if (suggestions.Count < 3)
+                {
+                    // Fill with fallback suggestions if needed
+                    while (suggestions.Count < 3)
+                    {
+                        suggestions.Add(CreateFallbackSuggestion($"Additional habit for {onboardingData.PrimaryGoal}"));
+                    }
+                }
+                else if (suggestions.Count > 3)
+                {
+                    // Trim to exactly 3
+                    suggestions = suggestions.Take(3).ToList();
+                }
+
+                return suggestions;
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogError(ex, "Failed to parse AI onboarding response as JSON");
+                return CreateFallbackOnboardingSuggestions(onboardingData);
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogError(ex, "HTTP error calling OpenAI API for onboarding");
+                return CreateFallbackOnboardingSuggestions(onboardingData);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error generating AI onboarding suggestions");
+                return CreateFallbackOnboardingSuggestions(onboardingData);
+            }
+        }
+
+        private string BuildOnboardingPrompt(OnboardingRequest data)
+        {
+            return $@"User Onboarding Profile:
+- Primary Goal: {data.PrimaryGoal}
+- Current Struggle: {data.CurrentStruggle}
+- Motivation Level: {data.MotivationLevel}
+- Available Time: {data.AvailableTime}
+- Preferred Schedule: {data.PreferredSchedule}
+
+Based on this profile, suggest 3 personalized habits that will help them achieve their goal while addressing their struggles and fitting their lifestyle.";
+        }
+
+        private List<AiHabitSuggestionResponse> CreateFallbackOnboardingSuggestions(OnboardingRequest data)
+        {
+            return new List<AiHabitSuggestionResponse>
+            {
+                new AiHabitSuggestionResponse
+                {
+                    Name = "Morning Mindfulness",
+                    Description = "Start your day with 5 minutes of deep breathing or meditation to boost focus and reduce stress",
+                    Frequency = "daily",
+                    GoalType = "binary",
+                    TargetType = "ongoing",
+                    TargetValue = null,
+                    StreakTarget = 7,
+                    EndDate = null,
+                    AllowedGaps = 1,
+                    StartDate = null
+                },
+                new AiHabitSuggestionResponse
+                {
+                    Name = "Daily Water Goal",
+                    Description = "Drink 8 glasses of water throughout the day to stay hydrated and boost energy",
+                    Frequency = "daily",
+                    GoalType = "numeric",
+                    TargetType = "ongoing",
+                    TargetValue = 8,
+                    StreakTarget = 14,
+                    EndDate = null,
+                    AllowedGaps = 1,
+                    StartDate = null
+                },
+                new AiHabitSuggestionResponse
+                {
+                    Name = "Evening Reflection",
+                    Description = "Spend 5 minutes each evening writing down three things you're grateful for",
+                    Frequency = "daily",
+                    GoalType = "binary",
+                    TargetType = "ongoing",
+                    TargetValue = null,
+                    StreakTarget = 10,
+                    EndDate = null,
+                    AllowedGaps = 1,
+                    StartDate = null
+                }
+            };
         }
 
         private string ExtractJsonFromResponse(string response)

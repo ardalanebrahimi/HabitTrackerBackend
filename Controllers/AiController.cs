@@ -56,6 +56,41 @@ namespace HabitTrackerBackend.Controllers
         }
 
         /// <summary>
+        /// Generate multiple AI habit suggestions based on onboarding questionnaire answers
+        /// </summary>
+        /// <param name="request">The user's onboarding questionnaire answers</param>
+        /// <returns>Up to 3 AI-generated habit suggestions for onboarding</returns>
+        [HttpPost("onboard-suggest")]
+        public async Task<ActionResult<List<AiHabitSuggestionResponse>>> SuggestOnboardingHabits([FromBody] OnboardingRequest request)
+        {
+            try
+            {
+                _logger.LogInformation("Received onboarding suggestion request from user {UserId}", User.Identity?.Name);
+
+                if (!ModelState.IsValid)
+                {
+                    return BadRequest(ModelState);
+                }
+
+                var suggestions = await _aiService.GenerateOnboardingHabitSuggestionsAsync(request);
+
+                _logger.LogInformation("Generated {Count} onboarding habit suggestions", suggestions.Count);
+
+                return Ok(suggestions);
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("OpenAI API key"))
+            {
+                _logger.LogError(ex, "OpenAI API key not configured");
+                return StatusCode(500, new { message = "AI service is not configured. Please contact support." });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error generating onboarding habit suggestions");
+                return StatusCode(500, new { message = "Failed to generate habit suggestions. Please try again." });
+            }
+        }
+
+        /// <summary>
         /// Health check endpoint for AI service
         /// </summary>
         /// <returns>AI service status</returns>
