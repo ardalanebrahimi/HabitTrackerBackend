@@ -194,6 +194,7 @@ Guidelines:
                 suggestion.AllowedGaps = 1;
 
 
+            if (suggestion.Name?.Length > 50)
                 suggestion.Name = suggestion.Name.Substring(0, 47) + "...";
 
             if (suggestion.Description?.Length > 200)
