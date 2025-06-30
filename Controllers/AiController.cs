@@ -56,7 +56,7 @@ namespace HabitTrackerBackend.Controllers
         }
 
         /// <summary>
-        /// Generate multiple AI habit suggestions based on onboarding questionnaire answers
+        /// Generate multiple AI habits suggestions based on onboarding questionnaire answers
         /// </summary>
         /// <param name="request">The user's onboarding questionnaire answers</param>
         /// <returns>Up to 3 AI-generated habit suggestions for onboarding</returns>
