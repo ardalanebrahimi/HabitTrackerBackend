@@ -162,4 +162,22 @@ public class HabitsController : ControllerBase
             return BadRequest(ex.Message);
         }
     }
+
+    [HttpGet("{id}/logs")]
+    public async Task<ActionResult<IEnumerable<HabitLogDTO>>> GetHabitLogs(Guid id, [FromQuery] DateTime? startDate = null, [FromQuery] DateTime? endDate = null)
+    {
+        try
+        {
+            var userId = GetUserId();
+            var start = startDate ?? DateTime.UtcNow.AddDays(-84);
+            var end = endDate ?? DateTime.UtcNow;
+            
+            var logs = await _habitService.GetHabitLogs(userId, id, start, end);
+            return Ok(logs);
+        }
+        catch (ArgumentException ex)
+        {
+            return NotFound(ex.Message);
+        }
+    }
 }
