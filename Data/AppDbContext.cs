@@ -14,6 +14,12 @@ public class AppDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
     public DbSet<Notification> Notifications { get; set; }
     public DbSet<Cheer> Cheers { get; set; }
     public DbSet<HabitCopy> HabitCopies { get; set; }
+    
+    // Subscription and Token System
+    public DbSet<SubscriptionPlan> SubscriptionPlans { get; set; }
+    public DbSet<UserSubscription> UserSubscriptions { get; set; }
+    public DbSet<TokenTransaction> TokenTransactions { get; set; }
+    public DbSet<TokenPurchase> TokenPurchases { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -74,6 +80,39 @@ public class AppDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
             .HasOne(hc => hc.CopiedHabit)
             .WithMany()
             .HasForeignKey(hc => hc.CopiedHabitId)
+            .OnDelete(DeleteBehavior.Cascade);
+        
+        // Configure User referral relationships
+        modelBuilder.Entity<User>()
+            .HasOne(u => u.ReferredByUser)
+            .WithMany(u => u.ReferredUsers)
+            .HasForeignKey(u => u.ReferredById)
+            .OnDelete(DeleteBehavior.Restrict);
+        
+        // Configure subscription relationships
+        modelBuilder.Entity<UserSubscription>()
+            .HasOne(us => us.User)
+            .WithMany()
+            .HasForeignKey(us => us.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+        
+        modelBuilder.Entity<UserSubscription>()
+            .HasOne(us => us.SubscriptionPlan)
+            .WithMany()
+            .HasForeignKey(us => us.SubscriptionPlanId)
+            .OnDelete(DeleteBehavior.Restrict);
+        
+        // Configure token transaction relationships
+        modelBuilder.Entity<TokenTransaction>()
+            .HasOne(tt => tt.User)
+            .WithMany()
+            .HasForeignKey(tt => tt.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+        
+        modelBuilder.Entity<TokenPurchase>()
+            .HasOne(tp => tp.User)
+            .WithMany()
+            .HasForeignKey(tp => tp.UserId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 }

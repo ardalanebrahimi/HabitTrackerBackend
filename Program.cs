@@ -101,6 +101,7 @@ builder.Services.AddSwaggerGen(c =>
 // Register Services
 builder.Services.AddScoped<HabitService>();
 builder.Services.AddHttpClient<AiHabitSuggestionService>();
+builder.Services.AddScoped<SubscriptionService>();
 
 // Build the Application
 var app = builder.Build();

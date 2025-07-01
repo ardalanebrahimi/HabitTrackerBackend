@@ -7,6 +7,7 @@ using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Cryptography;
 using Google.Apis.Auth.OAuth2.Requests;
+using Microsoft.AspNetCore.Authorization;
 
 [ApiController]
 [Route("api/[controller]")]
@@ -19,6 +20,16 @@ public class UserController : ControllerBase
     {
         _context = context;
         _configuration = configuration;
+    }
+
+    private Guid GetUserId()
+    {
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out Guid userId))
+        {
+            throw new UnauthorizedAccessException("Invalid or missing User ID.");
+        }
+        return userId;
     }
 
     [HttpPost("register")]
@@ -113,7 +124,7 @@ public class UserController : ControllerBase
         if (user == null) return Unauthorized();
 
         // Clear refresh token on logout
-        user.RefreshToken = null;
+        user.RefreshToken = string.Empty;
         user.RefreshTokenExpiryTime = DateTime.UtcNow;
         await _context.SaveChangesAsync();
 
@@ -177,7 +188,153 @@ public class UserController : ControllerBase
                 Email = user.Email
             }
         });
-    }    private string GenerateJwtToken(User user)
+    }
+
+    [HttpGet("token-balance")]
+    [Authorize]
+    public async Task<ActionResult<TokenBalanceDTO>> GetTokenBalance()
+    {
+        try
+        {
+            var userId = GetUserId();
+            var subscriptionService = HttpContext.RequestServices.GetRequiredService<SubscriptionService>();
+            var tokenBalance = await subscriptionService.GetTokenBalanceAsync(userId);
+            return Ok(tokenBalance);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Error retrieving token balance: {ex.Message}");
+        }
+    }
+
+    [HttpPost("spend-token")]
+    [Authorize]
+    public async Task<ActionResult<TokenBalanceDTO>> SpendToken([FromBody] SpendTokenRequest request)
+    {
+        try
+        {
+            var userId = GetUserId();
+            var subscriptionService = HttpContext.RequestServices.GetRequiredService<SubscriptionService>();
+            var tokenBalance = await subscriptionService.SpendTokensAsync(userId, request);
+            return Ok(tokenBalance);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Error spending tokens: {ex.Message}");
+        }
+    }
+
+    [HttpPost("earn-token")]
+    [Authorize]
+    public async Task<ActionResult<TokenBalanceDTO>> EarnToken([FromBody] EarnTokenRequest request)
+    {
+        try
+        {
+            var userId = GetUserId();
+            var subscriptionService = HttpContext.RequestServices.GetRequiredService<SubscriptionService>();
+            var tokenBalance = await subscriptionService.EarnTokensAsync(userId, request);
+            return Ok(tokenBalance);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Error earning tokens: {ex.Message}");
+        }
+    }
+
+    [HttpGet("subscription/status")]
+    [Authorize]
+    public async Task<ActionResult<SubscriptionStatusDTO>> GetSubscriptionStatus()
+    {
+        try
+        {
+            var userId = GetUserId();
+            var subscriptionService = HttpContext.RequestServices.GetRequiredService<SubscriptionService>();
+            var status = await subscriptionService.GetSubscriptionStatusAsync(userId);
+            return Ok(status);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Error retrieving subscription status: {ex.Message}");
+        }
+    }
+
+    [HttpGet("referral-code")]
+    [Authorize]
+    public async Task<ActionResult<object>> GetReferralCode()
+    {
+        try
+        {
+            var userId = GetUserId();
+            var subscriptionService = HttpContext.RequestServices.GetRequiredService<SubscriptionService>();
+            var referralCode = await subscriptionService.GenerateReferralCodeAsync(userId);
+            return Ok(new { referralCode });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Error generating referral code: {ex.Message}");
+        }
+    }
+
+    [HttpPost("apply-referral")]
+    [Authorize]
+    public async Task<ActionResult<TokenBalanceDTO>> ApplyReferralCode([FromBody] ReferralCodeRequest request)
+    {
+        try
+        {
+            var userId = GetUserId();
+            var subscriptionService = HttpContext.RequestServices.GetRequiredService<SubscriptionService>();
+            
+            var success = await subscriptionService.ProcessReferralAsync(userId, request.ReferralCode);
+            if (!success)
+            {
+                return BadRequest("Invalid referral code or already used");
+            }
+            
+            var tokenBalance = await subscriptionService.GetTokenBalanceAsync(userId);
+            return Ok(tokenBalance);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Error applying referral code: {ex.Message}");
+        }
+    }
+
+    [HttpGet("token-history")]
+    [Authorize]
+    public async Task<ActionResult<List<TokenTransactionDTO>>> GetTokenHistory([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+    {
+        try
+        {
+            var userId = GetUserId();
+            
+            var transactions = await _context.TokenTransactions
+                .Where(tt => tt.UserId == userId)
+                .OrderByDescending(tt => tt.CreatedAt)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(tt => new TokenTransactionDTO
+                {
+                    Id = tt.Id,
+                    Amount = tt.Amount,
+                    TransactionType = tt.TransactionType,
+                    Description = tt.Description,
+                    CreatedAt = tt.CreatedAt
+                })
+                .ToListAsync();
+                
+            return Ok(transactions);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Error retrieving token history: {ex.Message}");
+        }
+    }
+
+    private string GenerateJwtToken(User user)
     {
         var jwtKey = _configuration["Jwt:Key"];
         var jwtIssuer = _configuration["Jwt:Issuer"];
