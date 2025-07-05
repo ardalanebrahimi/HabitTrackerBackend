@@ -98,10 +98,15 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+// Configure Google Play Billing
+builder.Services.Configure<GooglePlayBillingOptions>(
+    builder.Configuration.GetSection("GooglePlayBilling"));
+
 // Register Services
 builder.Services.AddScoped<HabitService>();
 builder.Services.AddHttpClient<AiHabitSuggestionService>();
 builder.Services.AddScoped<SubscriptionService>();
+builder.Services.AddScoped<IGooglePlayBillingService, GooglePlayBillingService>();
 
 // Build the Application
 var app = builder.Build();

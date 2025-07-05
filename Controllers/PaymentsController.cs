@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using System.Security.Claims;
+using HabitTrackerBackend.Services;
 
 [Authorize]
 [ApiController]
@@ -10,11 +12,22 @@ public class PaymentsController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly SubscriptionService _subscriptionService;
+    private readonly IGooglePlayBillingService _googlePlayBillingService;
+    private readonly GooglePlayBillingOptions _googlePlayOptions;
+    private readonly ILogger<PaymentsController> _logger;
     
-    public PaymentsController(AppDbContext context, SubscriptionService subscriptionService)
+    public PaymentsController(
+        AppDbContext context, 
+        SubscriptionService subscriptionService,
+        IGooglePlayBillingService googlePlayBillingService,
+        IOptions<GooglePlayBillingOptions> googlePlayOptions,
+        ILogger<PaymentsController> logger)
     {
         _context = context;
         _subscriptionService = subscriptionService;
+        _googlePlayBillingService = googlePlayBillingService;
+        _googlePlayOptions = googlePlayOptions.Value;
+        _logger = logger;
     }
     
     private Guid GetUserId()
@@ -35,12 +48,23 @@ public class PaymentsController : ControllerBase
         {
             var userId = GetUserId();
             
-            // TODO: Implement Google Play billing verification
-            // For now, we'll simulate successful verification
+            // Check if purchase token was already processed
+            var existingPurchase = await _context.TokenPurchases
+                .FirstOrDefaultAsync(tp => tp.GooglePurchaseToken == request.PurchaseToken);
+            
+            if (existingPurchase != null)
+            {
+                _logger.LogWarning("Purchase token already processed: {Token}", request.PurchaseToken);
+                return BadRequest("Purchase token has already been processed");
+            }
+            
+            // Verify purchase with Google Play
             bool isValidPurchase = await VerifyGooglePlayPurchase(request.PurchaseToken, request.ProductId);
             
             if (!isValidPurchase)
             {
+                _logger.LogWarning("Invalid purchase token: {Token}, ProductId: {ProductId}", 
+                    request.PurchaseToken, request.ProductId);
                 return BadRequest("Invalid purchase token");
             }
             
@@ -68,10 +92,16 @@ public class PaymentsController : ControllerBase
                 RelatedEntityId = tokenPurchase.Id
             });
             
+            await _context.SaveChangesAsync();
+            
+            _logger.LogInformation("Token purchase processed successfully for user {UserId}, Amount: {Amount}", 
+                userId, request.TokenAmount);
+            
             return Ok(tokenBalance);
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Error processing token purchase for user {UserId}", GetUserId());
             return StatusCode(500, $"Error processing purchase: {ex.Message}");
         }
     }
@@ -84,11 +114,23 @@ public class PaymentsController : ControllerBase
         {
             var userId = GetUserId();
             
-            // TODO: Implement Google Play billing verification
-            bool isValidPurchase = await VerifyGooglePlayPurchase(request.PurchaseToken, request.ProductId);
+            // Check if purchase token was already processed
+            var existingSubscription = await _context.UserSubscriptions
+                .FirstOrDefaultAsync(us => us.GooglePurchaseToken == request.PurchaseToken);
+            
+            if (existingSubscription != null)
+            {
+                _logger.LogWarning("Subscription purchase token already processed: {Token}", request.PurchaseToken);
+                return BadRequest("Subscription purchase token has already been processed");
+            }
+            
+            // Verify subscription with Google Play
+            bool isValidPurchase = await VerifyGooglePlaySubscription(request.PurchaseToken, request.ProductId);
             
             if (!isValidPurchase)
             {
+                _logger.LogWarning("Invalid subscription purchase token: {Token}, ProductId: {ProductId}", 
+                    request.PurchaseToken, request.ProductId);
                 return BadRequest("Invalid purchase token");
             }
             
@@ -98,18 +140,20 @@ public class PaymentsController : ControllerBase
             
             if (subscriptionPlan == null)
             {
+                _logger.LogWarning("Invalid subscription plan: {ProductId}", request.ProductId);
                 return BadRequest("Invalid subscription plan");
             }
             
             // Create or update user subscription
-            var existingSubscription = await _context.UserSubscriptions
+            var existingActiveSubscription = await _context.UserSubscriptions
                 .FirstOrDefaultAsync(us => us.UserId == userId && us.Status == SubscriptionStatus.Active);
             
-            if (existingSubscription != null)
+            if (existingActiveSubscription != null)
             {
                 // Cancel existing subscription
-                existingSubscription.Status = SubscriptionStatus.Cancelled;
-                existingSubscription.CancelledAt = DateTime.UtcNow;
+                existingActiveSubscription.Status = SubscriptionStatus.Cancelled;
+                existingActiveSubscription.CancelledAt = DateTime.UtcNow;
+                _logger.LogInformation("Cancelled existing subscription for user {UserId}", userId);
             }
             
             // Create new subscription
@@ -148,10 +192,14 @@ public class PaymentsController : ControllerBase
             
             await _context.SaveChangesAsync();
             
+            _logger.LogInformation("Subscription activated successfully for user {UserId}, Plan: {PlanName}", 
+                userId, subscriptionPlan.PlanName);
+            
             return Ok(await _subscriptionService.GetSubscriptionStatusAsync(userId));
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Error processing subscription for user {UserId}", GetUserId());
             return StatusCode(500, $"Error processing subscription: {ex.Message}");
         }
     }
@@ -204,10 +252,13 @@ public class PaymentsController : ControllerBase
             
             await _context.SaveChangesAsync();
             
+            _logger.LogInformation("Subscription cancelled for user {UserId}", userId);
+            
             return Ok(await _subscriptionService.GetSubscriptionStatusAsync(userId));
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Error cancelling subscription for user {UserId}", GetUserId());
             return StatusCode(500, $"Error cancelling subscription: {ex.Message}");
         }
     }
@@ -220,35 +271,117 @@ public class PaymentsController : ControllerBase
         {
             var userId = GetUserId();
             
-            // TODO: Implement Google Play purchase restoration
-            // This would involve querying Google Play for the user's purchase history
-            // and restoring any valid subscriptions
+            // Get all user's purchase tokens from the database
+            var userPurchases = await _context.UserSubscriptions
+                .Where(us => us.UserId == userId && !string.IsNullOrEmpty(us.GooglePurchaseToken))
+                .ToListAsync();
+            
+            var tokenPurchases = await _context.TokenPurchases
+                .Where(tp => tp.UserId == userId && !string.IsNullOrEmpty(tp.GooglePurchaseToken))
+                .ToListAsync();
+            
+            bool restoredAny = false;
+            
+            // Verify active subscriptions
+            foreach (var subscription in userPurchases)
+            {
+                try
+                {
+                    var subscriptionPlan = await _context.SubscriptionPlans
+                        .FirstOrDefaultAsync(sp => sp.Id == subscription.SubscriptionPlanId);
+                    
+                    if (subscriptionPlan != null)
+                    {
+                        bool isValid = await VerifyGooglePlaySubscription(subscription.GooglePurchaseToken!, subscriptionPlan.PlanName);
+                        
+                        if (isValid && subscription.Status != SubscriptionStatus.Active)
+                        {
+                            subscription.Status = SubscriptionStatus.Active;
+                            restoredAny = true;
+                            _logger.LogInformation("Restored subscription for user {UserId}, Plan: {PlanName}", 
+                                userId, subscriptionPlan.PlanName);
+                        }
+                        else if (!isValid && subscription.Status == SubscriptionStatus.Active)
+                        {
+                            subscription.Status = SubscriptionStatus.Expired;
+                            _logger.LogInformation("Expired subscription for user {UserId}, Plan: {PlanName}", 
+                                userId, subscriptionPlan.PlanName);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error verifying subscription during restore for user {UserId}", userId);
+                }
+            }
+            
+            if (restoredAny)
+            {
+                await _context.SaveChangesAsync();
+            }
+            
+            _logger.LogInformation("Purchase restoration completed for user {UserId}, Restored: {Restored}", 
+                userId, restoredAny);
             
             return Ok(await _subscriptionService.GetSubscriptionStatusAsync(userId));
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Error restoring purchases for user {UserId}", GetUserId());
             return StatusCode(500, $"Error restoring purchases: {ex.Message}");
         }
     }
     
-    // Private method to verify Google Play purchases
+    // Private method to verify Google Play product purchases
     private async Task<bool> VerifyGooglePlayPurchase(string purchaseToken, string productId)
     {
         try
         {
-            // TODO: Implement actual Google Play billing verification
-            // This involves:
-            // 1. Using Google Play Developer API
-            // 2. Verifying the purchase token with Google's servers
-            // 3. Checking if the purchase is valid and not refunded
+            if (string.IsNullOrEmpty(_googlePlayOptions.PackageName))
+            {
+                _logger.LogWarning("Google Play package name not configured");
+                return false;
+            }
             
-            // For development, we'll simulate validation
-            await Task.Delay(100); // Simulate API call
-            return !string.IsNullOrEmpty(purchaseToken) && !string.IsNullOrEmpty(productId);
+            var isValid = await _googlePlayBillingService.IsProductPurchaseValidAsync(
+                _googlePlayOptions.PackageName, productId, purchaseToken);
+            
+            _logger.LogInformation("Product purchase verification result: {IsValid} for ProductId: {ProductId}", 
+                isValid, productId);
+            
+            return isValid;
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed to verify Google Play product purchase: {ProductId}, Token: {Token}", 
+                productId, purchaseToken);
+            return false;
+        }
+    }
+    
+    // Private method to verify Google Play subscription purchases
+    private async Task<bool> VerifyGooglePlaySubscription(string purchaseToken, string subscriptionId)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(_googlePlayOptions.PackageName))
+            {
+                _logger.LogWarning("Google Play package name not configured");
+                return false;
+            }
+            
+            var isValid = await _googlePlayBillingService.IsSubscriptionPurchaseValidAsync(
+                _googlePlayOptions.PackageName, subscriptionId, purchaseToken);
+            
+            _logger.LogInformation("Subscription purchase verification result: {IsValid} for SubscriptionId: {SubscriptionId}", 
+                isValid, subscriptionId);
+            
+            return isValid;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to verify Google Play subscription purchase: {SubscriptionId}, Token: {Token}", 
+                subscriptionId, purchaseToken);
             return false;
         }
     }
