@@ -28,7 +28,7 @@ namespace HabitTrackerBackend.Services
             {
                 GoogleCredential credential;
                 
-                if (!string.IsNullOrEmpty(_options.ServiceAccountJsonPath))
+                if (!string.IsNullOrEmpty(_options.ServiceAccountJsonPath) && File.Exists(_options.ServiceAccountJsonPath))
                 {
                     // Use service account key file
                     credential = GoogleCredential.FromFile(_options.ServiceAccountJsonPath)
@@ -42,6 +42,7 @@ namespace HabitTrackerBackend.Services
                 }
                 else
                 {
+                    _logger.LogWarning("Google Play service account credentials not configured. Purchase verification will be skipped.");
                     throw new InvalidOperationException("Google Play service account credentials not configured");
                 }
 
