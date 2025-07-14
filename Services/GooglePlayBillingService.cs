@@ -47,6 +47,11 @@ namespace HabitTrackerBackend.Services
                 }
 
                 _logger.LogWarning("credential: " + credential.ToString());
+
+                // ADD THIS LOGGING LINE
+                _logger.LogInformation("Attempting to use service account: {email}",
+                    ((ServiceAccountCredential)credential.UnderlyingCredential).Id);
+
                 _androidPublisherService = new AndroidPublisherService(new BaseClientService.Initializer
                 {
                     HttpClientInitializer = credential,
@@ -69,7 +74,7 @@ namespace HabitTrackerBackend.Services
                 var service = await GetAndroidPublisherServiceAsync();
                 _logger.LogWarning("Test1: " + service.ApiKey);
                 var request = service.Purchases.Products.Get(packageName, productId, purchaseToken);
-                _logger.LogWarning("Test2: " + request.Token);
+                _logger.LogWarning("Test2: " + request);
                 var response = await request.ExecuteAsync();
                 _logger.LogWarning("Test3: " + response.PurchaseState);
 
