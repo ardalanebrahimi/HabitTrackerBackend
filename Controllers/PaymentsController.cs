@@ -46,6 +46,7 @@ public class PaymentsController : ControllerBase
     {
         try
         {
+            _logger.LogInformation("payload:", request);
             var userId = GetUserId();
             
             // Check if purchase token was already processed
