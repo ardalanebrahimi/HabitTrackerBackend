@@ -67,10 +67,13 @@ namespace HabitTrackerBackend.Services
             try
             {
                 var service = await GetAndroidPublisherServiceAsync();
+                _logger.LogWarning("Test1: " + service.ApiKey);
                 var request = service.Purchases.Products.Get(packageName, productId, purchaseToken);
+                _logger.LogWarning("Test2: " + request.Token);
                 var response = await request.ExecuteAsync();
-                
-                _logger.LogInformation("Product purchase verified: {ProductId}, Status: {Status}", 
+                _logger.LogWarning("Test3: " + response.PurchaseState);
+
+        _logger.LogInformation("Product purchase verified: {ProductId}, Status: {Status}", 
                     productId, response.PurchaseState);
                 
                 return response;
