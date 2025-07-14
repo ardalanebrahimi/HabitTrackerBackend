@@ -47,6 +47,7 @@ namespace HabitTrackerBackend.Services
                 }
 
                 _logger.LogWarning("credential: " + credential.ToString());
+                _logger.LogWarning("credential2: " + ((ServiceAccountCredential)credential.UnderlyingCredential).Id);
 
                 // ADD THIS LOGGING LINE
                 _logger.LogInformation("Attempting to use service account: {email}",
