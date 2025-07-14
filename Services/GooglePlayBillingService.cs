@@ -46,7 +46,7 @@ namespace HabitTrackerBackend.Services
                     throw new InvalidOperationException("Google Play service account credentials not configured");
                 }
 
-                _logger.LogWarning("credential: {credential}", credential);
+                _logger.LogWarning("credential: " + credential.ToString());
                 _androidPublisherService = new AndroidPublisherService(new BaseClientService.Initializer
                 {
                     HttpClientInitializer = credential,
