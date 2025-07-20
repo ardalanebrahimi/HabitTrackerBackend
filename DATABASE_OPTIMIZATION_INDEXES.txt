@@ -1,0 +1,55 @@
+-- Database Index Optimization for Habit Tracker Performance
+-- Run these after the main optimization to further improve query performance
+
+--Index for habit logs filtering by habit ID and period keys
+CREATE INDEX CONCURRENTLY IF NOT exists idx_habit_logs_habit_id_daily_key 
+ON public.habit_logs ("HabitId","DailyKey");
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_habit_logs_habit_id_weekly_key 
+ON habit_logs ("HabitId", "WeeklyKey");
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_habit_logs_habit_id_monthly_key 
+ON habit_logs ("HabitId", "MonthlyKey");
+
+--Composite index for habit filtering
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_habits_user_archived 
+ON habits ("UserId", "IsArchived");
+
+--Index for connection queries
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_connections_user_status 
+ON connections ("UserId", "Status");
+
+Index for habit check requests
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_habit_check_requests_requested_user 
+ON habit_check_requests ("requested_user_id");
+
+--Index for habit logs by multiple habit IDs (for bulk operations)
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_habit_logs_habit_id_timestamp 
+ON habit_logs ("HabitId", "Timestamp" DESC);
+
+--Analysis queries to check index usage after deployment
+--Run these to verify the indexes are being used:
+
+/*
+Check if habit logs queries use indexes
+EXPLAIN ANALYZE 
+SELECT * FROM habit_logs 
+WHERE HabitId = 'some-guid' AND DailyKey = 20240101;
+
+Check if habit queries use indexes  
+EXPLAIN ANALYZE
+SELECT * FROM habits 
+WHERE UserId = 'some-guid' AND IsArchived = false;
+
+Monitor index usage with:
+SELECT 
+    schemaname,
+    tablename,
+    indexname,
+    idx_scan as index_scans,
+    idx_tup_read as tuples_read,
+    idx_tup_fetch as tuples_fetched
+FROM pg_stat_user_indexes
+WHERE schemaname = 'public'
+ORDER BY idx_scan DESC;
+*/

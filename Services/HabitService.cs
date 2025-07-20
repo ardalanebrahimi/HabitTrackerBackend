@@ -1,14 +1,17 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
+using System.Diagnostics;
 
 public class HabitService
 {
     private readonly AppDbContext _context;
+    private readonly ILogger<HabitService> _logger;
 
-    public HabitService(AppDbContext context)
+    public HabitService(AppDbContext context, ILogger<HabitService> logger)
     {
         _context = context;
+        _logger = logger;
     }
 
     public async Task<HabitWithProgressDTO> AddHabit(Guid userId, CreateHabitDTO habitDto)
@@ -55,8 +58,6 @@ public class HabitService
         };
     }
 
-
-
     // ✅ Get All Habits with Current Progress & Streaks
     public async Task<List<HabitWithProgressDTO>> GetAllHabits(Guid userId)
     {
@@ -81,11 +82,14 @@ public class HabitService
 
     public async Task<List<HabitWithProgressDTO>> GetTodayHabits(List<Habit> habits)
     {
+        _logger.LogInformation("GetTodayHabits started with {Count} habits", habits.Count);
+        var stopwatch = Stopwatch.StartNew();
+
         var today = DateTime.UtcNow;
         var currentWeekKey = GetPeriodKey("weekly", today);  // Get the current week identifier
         var currentMonthKey = GetPeriodKey("monthly", today); // Get the current month identifier
 
-        return habits
+        var result = habits
             .Where(h => !HasReachedCompletion(h.Id, h.StreakTarget, h.EndDate) && 
                 (!h.StartDate.HasValue || h.StartDate.Value.Date <= today.Date) &&
                 (h.Frequency == "daily" ||
@@ -102,9 +106,14 @@ public class HabitService
                 Streak = CalculateStreak(h.Id ?? Guid.Empty, h.Frequency, today),
                 IsCompleted = IsHabitCompleted(h.Id ?? Guid.Empty, h.Frequency, today),
                 UserId = h.UserId,
-                UserName = h.User.UserName
+                UserName = h.User?.UserName
             })
             .ToList();
+
+        stopwatch.Stop();
+        _logger.LogInformation("GetTodayHabits completed in {ElapsedMs}ms, returned {Count} habits", stopwatch.ElapsedMilliseconds, result.Count);
+        
+        return result;
     }
 
     // ✅ Check if Habit is Completed by Streak or End Date
@@ -192,7 +201,9 @@ public class HabitService
         };
 
         return query.Sum(l => l.Value);
-    }    public int CalculateStreak(Guid habitId, string frequency, DateTime now)
+    }
+
+    public int CalculateStreak(Guid habitId, string frequency, DateTime now)
     {
         var habit = _context.Habits.FirstOrDefault(h => h.Id == habitId);
         if (habit == null) return 0;
@@ -272,6 +283,7 @@ public class HabitService
             _ => throw new ArgumentException("Invalid frequency")
         };
     }
+
     public bool IsHabitCompleted(Guid habitId, string frequency, DateTime now)
     {
         var periodKey = GetPeriodKey(frequency, now);
@@ -311,6 +323,7 @@ public class HabitService
         await _context.SaveChangesAsync();
         return true;
     }
+
     public async Task<bool> ArchiveHabit(Guid userId, Guid habitId)
     {
         var habit = await _context.Habits
@@ -346,6 +359,7 @@ public class HabitService
             IsCompleted = IsHabitCompleted(h.Id ?? Guid.Empty, h.Frequency, today)
         }).ToList();
     }
+
     public async Task<HabitWithProgressDTO> UpdateHabit(Guid userId, Guid habitId, CreateHabitDTO updatedHabit)
     {
         var habit = await _context.Habits
@@ -386,6 +400,7 @@ public class HabitService
             IsCompleted = false
         };
     }
+
     public async Task<List<HabitLogDTO>> GetHabitLogs(Guid userId, Guid habitId, DateTime startDate, DateTime endDate)
     {
         var habit = await _context.Habits
@@ -495,19 +510,238 @@ public class HabitService
 
     internal async Task<ActionResult<IEnumerable<HabitWithProgressDTO>>> GetAllTodayHabitsToManage(Guid userId)
     {
-        List<HabitWithProgressDTO> todaysOwnedHabits = await GetAllOwnedTodaysHabit(userId);
-        List<HabitWithProgressDTO> todaysFriendsHabits = await GetAllFriendsHabitsToManage(userId);
-        return todaysOwnedHabits.Concat(todaysFriendsHabits).ToList();
+        var totalStopwatch = Stopwatch.StartNew();
+        _logger.LogInformation("GetAllTodayHabitsToManage started for user {UserId}", userId);
+
+        try
+        {
+            // Optimized version - fetch all data in fewer queries
+            var result = await GetAllTodayHabitsToManageOptimized(userId);
+            
+            totalStopwatch.Stop();
+            _logger.LogInformation("GetAllTodayHabitsToManage completed in {ElapsedMs}ms for user {UserId}, returned {Count} habits", 
+                totalStopwatch.ElapsedMilliseconds, userId, result.Value?.Count() ?? 0);
+            
+            return result;
+        }
+        catch (Exception ex)
+        {
+            totalStopwatch.Stop();
+            _logger.LogError(ex, "GetAllTodayHabitsToManage failed after {ElapsedMs}ms for user {UserId}", 
+                totalStopwatch.ElapsedMilliseconds, userId);
+            throw;
+        }
+    }
+
+    private async Task<ActionResult<IEnumerable<HabitWithProgressDTO>>> GetAllTodayHabitsToManageOptimized(Guid userId)
+    {
+        var today = DateTime.UtcNow;
+        var dailyKey = GetPeriodKey("daily", today);
+        var weeklyKey = GetPeriodKey("weekly", today);
+        var monthlyKey = GetPeriodKey("monthly", today);
+
+        // Step 1: Get user's own habits
+        var ownHabitsStopwatch = Stopwatch.StartNew();
+        var ownHabits = await _context.Habits
+            .Where(h => h.UserId == userId && !h.IsArchived)
+            .Include(h => h.User)
+            .ToListAsync();
+        ownHabitsStopwatch.Stop();
+        _logger.LogInformation("Fetched {Count} own habits in {ElapsedMs}ms", ownHabits.Count, ownHabitsStopwatch.ElapsedMilliseconds);
+
+        // Step 2: Get friend habits to manage
+        var friendHabitsStopwatch = Stopwatch.StartNew();
+        var checkRequestHabitIds = await _context.HabitCheckRequests
+            .Where(r => r.RequestedUserId == userId)
+            .Select(r => r.HabitId)
+            .ToListAsync();
+
+        var friendHabits = await _context.Habits
+            .Where(h => checkRequestHabitIds.Contains(h.Id) && !h.IsArchived)
+            .Include(h => h.User)
+            .ToListAsync();
+        friendHabitsStopwatch.Stop();
+        _logger.LogInformation("Fetched {Count} friend habits in {ElapsedMs}ms", friendHabits.Count, friendHabitsStopwatch.ElapsedMilliseconds);
+
+        // Step 3: Get all habit IDs to fetch logs
+        var allHabits = ownHabits.Concat(friendHabits).ToList();
+        var habitIds = allHabits.Select(h => h.Id.Value).ToList();
+
+        // Step 4: Fetch all relevant habit logs in one query
+        var logsStopwatch = Stopwatch.StartNew();
+        var habitLogs = await _context.HabitLogs
+            .Where(l => habitIds.Contains(l.HabitId))
+            .ToListAsync();
+        logsStopwatch.Stop();
+        _logger.LogInformation("Fetched {Count} habit logs in {ElapsedMs}ms", habitLogs.Count, logsStopwatch.ElapsedMilliseconds);
+
+        // Step 5: Group logs by habit ID for efficient lookup
+        var logsByHabit = habitLogs.GroupBy(l => l.HabitId).ToDictionary(g => g.Key, g => g.ToList());
+
+        // Step 6: Process habits efficiently
+        var processingStopwatch = Stopwatch.StartNew();
+        var ownResults = ProcessHabitsOptimized(ownHabits, logsByHabit, today, dailyKey, weeklyKey, monthlyKey, isOwned: true);
+        var friendResults = ProcessHabitsOptimized(friendHabits, logsByHabit, today, dailyKey, weeklyKey, monthlyKey, isOwned: false);
+        processingStopwatch.Stop();
+        _logger.LogInformation("Processed all habits in {ElapsedMs}ms", processingStopwatch.ElapsedMilliseconds);
+
+        return ownResults.Concat(friendResults).ToList();
+    }
+
+    private List<HabitWithProgressDTO> ProcessHabitsOptimized(
+        List<Habit> habits, 
+        Dictionary<Guid, List<HabitLog>> logsByHabit, 
+        DateTime today, 
+        int dailyKey, 
+        int weeklyKey, 
+        int monthlyKey,
+        bool isOwned)
+    {
+        var results = new List<HabitWithProgressDTO>();
+
+        foreach (var habit in habits)
+        {
+            // Filter today's habits efficiently
+            if (!ShouldIncludeHabitToday(habit, today, dailyKey, weeklyKey, monthlyKey, logsByHabit))
+                continue;
+
+            var habitLogs = logsByHabit.GetValueOrDefault(habit.Id.Value, new List<HabitLog>());
+            
+            var currentValue = GetCurrentProgressOptimized(habit.Id.Value, habit.Frequency, today, habitLogs);
+            var streak = CalculateStreakOptimized(habit, habitLogs, today);
+            var isCompleted = currentValue >= (habit.TargetValue ?? 1);
+
+            results.Add(new HabitWithProgressDTO
+            {
+                Id = habit.Id ?? Guid.Empty,
+                Name = habit.Name,
+                Description = habit.Description,
+                Frequency = habit.Frequency,
+                GoalType = habit.GoalType,
+                TargetValue = habit.TargetValue,
+                TargetType = habit.TargetType,
+                StreakTarget = habit.StreakTarget,
+                EndDate = habit.EndDate,
+                CurrentValue = currentValue,
+                Streak = streak,
+                IsCompleted = isCompleted,
+                UserId = habit.UserId,
+                UserName = habit.User.UserName,
+                isOwnedHabit = isOwned,
+                CanManageProgress = true,
+                CopyCount = habit.CopyCount
+            });
+        }
+
+        return results;
+    }
+
+    private bool ShouldIncludeHabitToday(Habit habit, DateTime today, int dailyKey, int weeklyKey, int monthlyKey, Dictionary<Guid, List<HabitLog>> logsByHabit)
+    {
+        // Check if habit has reached completion
+        if (HasReachedCompletionOptimized(habit, today, logsByHabit))
+            return false;
+
+        // Check start date
+        if (habit.StartDate.HasValue && habit.StartDate.Value.Date > today.Date)
+            return false;
+
+        // Check frequency-specific rules
+        return habit.Frequency switch
+        {
+            "daily" => true,
+            "weekly" => IsHabitInCurrentWeekOptimized(habit, weeklyKey, logsByHabit),
+            "monthly" => IsHabitInCurrentMonthOptimized(habit, monthlyKey, logsByHabit),
+            _ => false
+        };
+    }
+
+    private bool HasReachedCompletionOptimized(Habit habit, DateTime today, Dictionary<Guid, List<HabitLog>> logsByHabit)
+    {
+        if (habit.StreakTarget != null)
+        {
+            var habitLogs = logsByHabit.GetValueOrDefault(habit.Id.Value, new List<HabitLog>());
+            int currentStreak = CalculateStreakOptimized(habit, habitLogs, today);
+            if (currentStreak >= habit.StreakTarget) return true;
+        }
+
+        if (habit.EndDate != null && today.Date > habit.EndDate.Value.Date)
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool IsHabitInCurrentWeekOptimized(Habit habit, int currentWeekKey, Dictionary<Guid, List<HabitLog>> logsByHabit)
+    {
+        var habitLogs = logsByHabit.GetValueOrDefault(habit.Id.Value, new List<HabitLog>());
+        int progress = habitLogs.Where(l => l.WeeklyKey == currentWeekKey).Sum(l => l.Value);
+        int target = habit.TargetValue ?? 1;
+
+        return progress < target || DateTime.UtcNow.DayOfWeek != DayOfWeek.Sunday;
+    }
+
+    private bool IsHabitInCurrentMonthOptimized(Habit habit, int currentMonthKey, Dictionary<Guid, List<HabitLog>> logsByHabit)
+    {
+        var habitLogs = logsByHabit.GetValueOrDefault(habit.Id.Value, new List<HabitLog>());
+        int progress = habitLogs.Where(l => l.MonthlyKey == currentMonthKey).Sum(l => l.Value);
+        int target = habit.TargetValue ?? 1;
+
+        return progress < target || DateTime.UtcNow.Day < DateTime.DaysInMonth(DateTime.UtcNow.Year, DateTime.UtcNow.Month);
+    }
+
+    private int GetCurrentProgressOptimized(Guid habitId, string frequency, DateTime now, List<HabitLog> habitLogs)
+    {
+        int periodKey = GetPeriodKey(frequency, now);
+
+        return frequency switch
+        {
+            "daily" => habitLogs.Where(l => l.DailyKey == periodKey).Sum(l => l.Value),
+            "weekly" => habitLogs.Where(l => l.WeeklyKey == periodKey).Sum(l => l.Value),
+            "monthly" => habitLogs.Where(l => l.MonthlyKey == periodKey).Sum(l => l.Value),
+            _ => 0
+        };
+    }
+
+    private int CalculateStreakOptimized(Habit habit, List<HabitLog> habitLogs, DateTime now)
+    {
+        if (!habitLogs.Any()) return 0;
+
+        string frequency = NormalizeFrequency(habit.Frequency);
+        
+        var periodKeys = frequency switch
+        {
+            "daily" => habitLogs.Select(l => l.DailyKey).Distinct().OrderByDescending(p => p).ToList(),
+            "weekly" => habitLogs.Select(l => l.WeeklyKey).Distinct().OrderByDescending(p => p).ToList(),
+            "monthly" => habitLogs.Select(l => l.MonthlyKey).Distinct().OrderByDescending(p => p).ToList(),
+            _ => new List<int>()
+        };
+
+        if (!periodKeys.Any()) return 0;
+
+        int allowedGaps = (frequency == "daily") ? habit.AllowedGaps : 0;
+        return ComputeStreak(periodKeys, frequency, now, allowedGaps);
     }
 
     private async Task<List<HabitWithProgressDTO>> GetAllOwnedTodaysHabit(Guid userId)
     {
+        _logger.LogInformation("GetAllOwnedTodaysHabit started for user {UserId}", userId);
+        var stopwatch = Stopwatch.StartNew();
+
         var habits = await _context.Habits
             .Where(h => userId == h.UserId && !h.IsArchived) // ✅ Exclude archived habits
             .Include(h => h.User) // Include the User entity
             .ToListAsync();
 
+        stopwatch.Stop();
+        _logger.LogInformation("Fetched {Count} owned habits in {ElapsedMs}ms", habits.Count, stopwatch.ElapsedMilliseconds);
+
+        stopwatch.Restart();
         var todaysHabits = await this.GetTodayHabits(habits);
+        stopwatch.Stop();
+        _logger.LogInformation("Processed today's habits in {ElapsedMs}ms, result count: {Count}", stopwatch.ElapsedMilliseconds, todaysHabits.Count);
+
         return todaysHabits.Select(h =>
         {
             h.CanManageProgress = true;
@@ -518,17 +752,31 @@ public class HabitService
 
     private async Task<List<HabitWithProgressDTO>> GetAllFriendsHabitsToManage(Guid userId)
     {
+        _logger.LogInformation("GetAllFriendsHabitsToManage started for user {UserId}", userId);
+        var stopwatch = Stopwatch.StartNew();
 
         var checkRequests = await _context.HabitCheckRequests
             .Where(r => r.RequestedUserId == userId /*&& r.Status == CheckRequestStatus.Pending*/)
             .Select(r=> r.HabitId)
             .ToListAsync();
+
+        stopwatch.Stop();
+        _logger.LogInformation("Fetched {Count} check requests in {ElapsedMs}ms", checkRequests.Count, stopwatch.ElapsedMilliseconds);
+
+        stopwatch.Restart();
         var habits = await _context.Habits
             .Where(h => checkRequests.Contains(h.Id) && !h.IsArchived) // ✅ Exclude archived habits
             .Include(h => h.User) // Include the User entity
             .ToListAsync();
 
+        stopwatch.Stop();
+        _logger.LogInformation("Fetched {Count} friend habits in {ElapsedMs}ms", habits.Count, stopwatch.ElapsedMilliseconds);
+
+        stopwatch.Restart();
         var todaysFriendsHabitsToManage = await this.GetTodayHabits(habits);
+        stopwatch.Stop();
+        _logger.LogInformation("Processed friend habits in {ElapsedMs}ms, result count: {Count}", stopwatch.ElapsedMilliseconds, todaysFriendsHabitsToManage.Count);
+
         return todaysFriendsHabitsToManage.Select(h =>
         {
             h.isOwnedHabit = false;

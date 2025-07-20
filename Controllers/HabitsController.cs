@@ -10,10 +10,12 @@ using System.Collections.Generic;
 public class HabitsController : ControllerBase
 {
     private readonly HabitService _habitService;
+    private readonly ILogger<HabitsController> _logger;
 
-    public HabitsController(HabitService habitService)
+    public HabitsController(HabitService habitService, ILogger<HabitsController> logger)
     {
         _habitService = habitService;
+        _logger = logger;
     }
 
     private Guid GetUserId()
@@ -39,8 +41,28 @@ public class HabitsController : ControllerBase
     [HttpGet("today")]
     public async Task<ActionResult<IEnumerable<HabitWithProgressDTO>>> GetTodayHabits()
     {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var userId = GetUserId();
-        return await _habitService.GetAllTodayHabitsToManage(userId);
+        
+        _logger.LogInformation("GetTodayHabits endpoint called for user {UserId}", userId);
+
+        try
+        {
+            var result = await _habitService.GetAllTodayHabitsToManage(userId);
+            stopwatch.Stop();
+            
+            _logger.LogInformation("GetTodayHabits endpoint completed in {ElapsedMs}ms for user {UserId}, returned {Count} habits", 
+                stopwatch.ElapsedMilliseconds, userId, result.Value?.Count() ?? 0);
+            
+            return result;
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+            _logger.LogError(ex, "GetTodayHabits endpoint failed after {ElapsedMs}ms for user {UserId}", 
+                stopwatch.ElapsedMilliseconds, userId);
+            throw;
+        }
     }
 
     [HttpGet("all")]
