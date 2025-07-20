@@ -341,23 +341,10 @@ public class HabitService
 
     public async Task<List<HabitWithProgressDTO>> GetAllHabits(Guid userId, bool archived)
     {
-        var today = DateTime.UtcNow;
-
-        var habits = await _context.Habits
-            .Where(h => h.UserId == userId && h.IsArchived == archived)
-            .ToListAsync();
-
-        return habits.Select(h => new HabitWithProgressDTO
-        {
-            Id = h.Id ?? Guid.Empty,
-            Name = h.Name,
-            Frequency = h.Frequency,
-            GoalType = h.GoalType,
-            TargetValue = h.TargetValue,
-            CurrentValue = GetCurrentProgress(h.Id ?? Guid.Empty, h.Frequency, today),
-            Streak = CalculateStreak(h.Id ?? Guid.Empty, h.Frequency, today),
-            IsCompleted = IsHabitCompleted(h.Id ?? Guid.Empty, h.Frequency, today)
-        }).ToList();
+        _logger.LogInformation("GetAllHabits (original) called for user {UserId}, archived: {Archived}", userId, archived);
+        
+        // Use optimized version by default
+        return await GetAllHabitsOptimized(userId, archived);
     }
 
     public async Task<HabitWithProgressDTO> UpdateHabit(Guid userId, Guid habitId, CreateHabitDTO updatedHabit)
@@ -487,25 +474,10 @@ public class HabitService
 
     public async Task<List<HabitWithProgressDTO>> GetFriendsHabits(Guid userId)
     {
-        // Get all connected friends' IDs
-        var connectedUserIds = await _context.Connections
-            .Where(c => c.UserId == userId && c.Status == ConnectionStatus.Approved)
-            .Select(c => c.ConnectedUserId)
-            .ToListAsync();
-
-        var habits = await _context.Habits
-            .Where(h => connectedUserIds.Contains(h.UserId) && !h.IsArchived) // ✅ Exclude archived habits
-            .Include(h => h.User) // Include the User entity
-            .ToListAsync();
-
-        // Get today's habits for all connected friends
-        var todaysFriendsHabits = await GetTodayHabits(habits);
-        return todaysFriendsHabits.Select(h =>
-        {
-            h.isOwnedHabit = false;
-            h.CanManageProgress = false;
-            return h;
-        }).ToList();
+        _logger.LogInformation("GetFriendsHabits (original) called for user {UserId}", userId);
+        
+        // Use optimized version by default
+        return await GetFriendsHabitsOptimized(userId);
     }
 
     internal async Task<ActionResult<IEnumerable<HabitWithProgressDTO>>> GetAllTodayHabitsToManage(Guid userId)
@@ -787,27 +759,10 @@ public class HabitService
 
     public async Task<List<HabitWithProgressDTO>> GetPublicHabits(Guid userId, int pageNumber, int pageSize)
     {
-        // Get all connected friends' IDs
-        var connectedUserIds = await _context.Connections
-            .Where(c => c.UserId == userId && c.Status == ConnectionStatus.Approved)
-            .Select(c => c.ConnectedUserId)
-            .ToListAsync();
-
-        var habits = await _context.Habits
-            .Where(h => h.UserId != userId && !connectedUserIds.Contains(h.UserId) && !h.IsArchived)
-            .Include(h => h.User) // Include the User entity
-            .OrderByDescending(h => h.CreatedAt)
-            .Skip((pageNumber - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync();
-
-        var todaysFriendsHabitsToManage = await this.GetTodayHabits(habits);
-        return todaysFriendsHabitsToManage.Select(h =>
-        {
-            h.isOwnedHabit = false;
-            h.CanManageProgress = false;
-            return h;
-        }).ToList();
+        _logger.LogInformation("GetPublicHabits (original) called for user {UserId}, page {PageNumber}, size {PageSize}", userId, pageNumber, pageSize);
+        
+        // Use optimized version by default
+        return await GetPublicHabitsOptimized(userId, pageNumber, pageSize);
     }
 
     public async Task<HabitWithProgressDTO> CopyHabit(Guid userId, Guid habitId)
@@ -874,4 +829,283 @@ public class HabitService
             CanManageProgress = true
         };
     }
+
+    // OPTIMIZED ENDPOINTS - START
+
+    /// <summary>
+    /// Optimized version of GetAllHabits for active/archived habits
+    /// </summary>
+    public async Task<List<HabitWithProgressDTO>> GetAllHabitsOptimized(Guid userId, bool archived)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        _logger.LogInformation("GetAllHabitsOptimized started for user {UserId}, archived: {Archived}", userId, archived);
+
+        try
+        {
+            var today = DateTime.UtcNow;
+
+            // Step 1: Get habits
+            var habitsStopwatch = Stopwatch.StartNew();
+            var habits = await _context.Habits
+                .Where(h => h.UserId == userId && h.IsArchived == archived)
+                .Include(h => h.User)
+                .ToListAsync();
+            habitsStopwatch.Stop();
+            _logger.LogInformation("Fetched {Count} habits in {ElapsedMs}ms", habits.Count, habitsStopwatch.ElapsedMilliseconds);
+
+            if (!habits.Any())
+            {
+                stopwatch.Stop();
+                _logger.LogInformation("GetAllHabitsOptimized completed in {ElapsedMs}ms - no habits found", stopwatch.ElapsedMilliseconds);
+                return new List<HabitWithProgressDTO>();
+            }
+
+            // Step 2: Get all habit logs in one query
+            var habitIds = habits.Select(h => h.Id.Value).ToList();
+            var logsStopwatch = Stopwatch.StartNew();
+            var habitLogs = await _context.HabitLogs
+                .Where(l => habitIds.Contains(l.HabitId))
+                .ToListAsync();
+            logsStopwatch.Stop();
+            _logger.LogInformation("Fetched {Count} habit logs in {ElapsedMs}ms", habitLogs.Count, logsStopwatch.ElapsedMilliseconds);
+
+            // Step 3: Group logs by habit for efficient lookup
+            var logsByHabit = habitLogs.GroupBy(l => l.HabitId).ToDictionary(g => g.Key, g => g.ToList());
+
+            // Step 4: Process all habits efficiently
+            var processingStopwatch = Stopwatch.StartNew();
+            var results = ProcessAllHabitsOptimized(habits, logsByHabit, today, userId);
+            processingStopwatch.Stop();
+            _logger.LogInformation("Processed {Count} habits in {ElapsedMs}ms", results.Count, processingStopwatch.ElapsedMilliseconds);
+
+            stopwatch.Stop();
+            _logger.LogInformation("GetAllHabitsOptimized completed in {ElapsedMs}ms, returned {Count} habits", 
+                stopwatch.ElapsedMilliseconds, results.Count);
+
+            return results;
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+            _logger.LogError(ex, "GetAllHabitsOptimized failed after {ElapsedMs}ms for user {UserId}", 
+                stopwatch.ElapsedMilliseconds, userId);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Optimized version of GetFriendsHabits
+    /// </summary>
+    public async Task<List<HabitWithProgressDTO>> GetFriendsHabitsOptimized(Guid userId)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        _logger.LogInformation("GetFriendsHabitsOptimized started for user {UserId}", userId);
+
+        try
+        {
+            var today = DateTime.UtcNow;
+            var dailyKey = GetPeriodKey("daily", today);
+            var weeklyKey = GetPeriodKey("weekly", today);
+            var monthlyKey = GetPeriodKey("monthly", today);
+
+            // Step 1: Get connected friends' IDs
+            var connectionsStopwatch = Stopwatch.StartNew();
+            var connectedUserIds = await _context.Connections
+                .Where(c => c.UserId == userId && c.Status == ConnectionStatus.Approved)
+                .Select(c => c.ConnectedUserId)
+                .ToListAsync();
+            connectionsStopwatch.Stop();
+            _logger.LogInformation("Fetched {Count} connections in {ElapsedMs}ms", connectedUserIds.Count, connectionsStopwatch.ElapsedMilliseconds);
+
+            if (!connectedUserIds.Any())
+            {
+                stopwatch.Stop();
+                _logger.LogInformation("GetFriendsHabitsOptimized completed in {ElapsedMs}ms - no friends found", stopwatch.ElapsedMilliseconds);
+                return new List<HabitWithProgressDTO>();
+            }
+
+            // Step 2: Get friends' habits
+            var habitsStopwatch = Stopwatch.StartNew();
+            var habits = await _context.Habits
+                .Where(h => connectedUserIds.Contains(h.UserId) && !h.IsArchived)
+                .Include(h => h.User)
+                .ToListAsync();
+            habitsStopwatch.Stop();
+            _logger.LogInformation("Fetched {Count} friend habits in {ElapsedMs}ms", habits.Count, habitsStopwatch.ElapsedMilliseconds);
+
+            if (!habits.Any())
+            {
+                stopwatch.Stop();
+                _logger.LogInformation("GetFriendsHabitsOptimized completed in {ElapsedMs}ms - no friend habits found", stopwatch.ElapsedMilliseconds);
+                return new List<HabitWithProgressDTO>();
+            }
+
+            // Step 3: Get all habit logs in one query
+            var habitIds = habits.Select(h => h.Id.Value).ToList();
+            var logsStopwatch = Stopwatch.StartNew();
+            var habitLogs = await _context.HabitLogs
+                .Where(l => habitIds.Contains(l.HabitId))
+                .ToListAsync();
+            logsStopwatch.Stop();
+            _logger.LogInformation("Fetched {Count} habit logs in {ElapsedMs}ms", habitLogs.Count, logsStopwatch.ElapsedMilliseconds);
+
+            // Step 4: Group logs by habit for efficient lookup
+            var logsByHabit = habitLogs.GroupBy(l => l.HabitId).ToDictionary(g => g.Key, g => g.ToList());
+
+            // Step 5: Process habits efficiently (today's habits only)
+            var processingStopwatch = Stopwatch.StartNew();
+            var results = ProcessHabitsOptimized(habits, logsByHabit, today, dailyKey, weeklyKey, monthlyKey, isOwned: false);
+            processingStopwatch.Stop();
+            _logger.LogInformation("Processed {Count} friend habits in {ElapsedMs}ms", results.Count, processingStopwatch.ElapsedMilliseconds);
+
+            // Set friend-specific properties
+            foreach (var habit in results)
+            {
+                habit.isOwnedHabit = false;
+                habit.CanManageProgress = false;
+            }
+
+            stopwatch.Stop();
+            _logger.LogInformation("GetFriendsHabitsOptimized completed in {ElapsedMs}ms, returned {Count} habits", 
+                stopwatch.ElapsedMilliseconds, results.Count);
+
+            return results;
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+            _logger.LogError(ex, "GetFriendsHabitsOptimized failed after {ElapsedMs}ms for user {UserId}", 
+                stopwatch.ElapsedMilliseconds, userId);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Optimized version of GetPublicHabits
+    /// </summary>
+    public async Task<List<HabitWithProgressDTO>> GetPublicHabitsOptimized(Guid userId, int pageNumber, int pageSize)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        _logger.LogInformation("GetPublicHabitsOptimized started for user {UserId}, page {PageNumber}, size {PageSize}", userId, pageNumber, pageSize);
+
+        try
+        {
+            var today = DateTime.UtcNow;
+            var dailyKey = GetPeriodKey("daily", today);
+            var weeklyKey = GetPeriodKey("weekly", today);
+            var monthlyKey = GetPeriodKey("monthly", today);
+
+            // Step 1: Get connected friends' IDs to exclude them
+            var connectionsStopwatch = Stopwatch.StartNew();
+            var connectedUserIds = await _context.Connections
+                .Where(c => c.UserId == userId && c.Status == ConnectionStatus.Approved)
+                .Select(c => c.ConnectedUserId)
+                .ToListAsync();
+            connectionsStopwatch.Stop();
+            _logger.LogInformation("Fetched {Count} connections in {ElapsedMs}ms", connectedUserIds.Count, connectionsStopwatch.ElapsedMilliseconds);
+
+            // Step 2: Get public habits with pagination
+            var habitsStopwatch = Stopwatch.StartNew();
+            var habits = await _context.Habits
+                .Where(h => h.UserId != userId && !connectedUserIds.Contains(h.UserId) && !h.IsArchived)
+                .Include(h => h.User)
+                .OrderByDescending(h => h.CreatedAt)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+            habitsStopwatch.Stop();
+            _logger.LogInformation("Fetched {Count} public habits in {ElapsedMs}ms", habits.Count, habitsStopwatch.ElapsedMilliseconds);
+
+            if (!habits.Any())
+            {
+                stopwatch.Stop();
+                _logger.LogInformation("GetPublicHabitsOptimized completed in {ElapsedMs}ms - no public habits found", stopwatch.ElapsedMilliseconds);
+                return new List<HabitWithProgressDTO>();
+            }
+
+            // Step 3: Get all habit logs in one query
+            var habitIds = habits.Select(h => h.Id.Value).ToList();
+            var logsStopwatch = Stopwatch.StartNew();
+            var habitLogs = await _context.HabitLogs
+                .Where(l => habitIds.Contains(l.HabitId))
+                .ToListAsync();
+            logsStopwatch.Stop();
+            _logger.LogInformation("Fetched {Count} habit logs in {ElapsedMs}ms", habitLogs.Count, logsStopwatch.ElapsedMilliseconds);
+
+            // Step 4: Group logs by habit for efficient lookup
+            var logsByHabit = habitLogs.GroupBy(l => l.HabitId).ToDictionary(g => g.Key, g => g.ToList());
+
+            // Step 5: Process habits efficiently (today's habits only)
+            var processingStopwatch = Stopwatch.StartNew();
+            var results = ProcessHabitsOptimized(habits, logsByHabit, today, dailyKey, weeklyKey, monthlyKey, isOwned: false);
+            processingStopwatch.Stop();
+            _logger.LogInformation("Processed {Count} public habits in {ElapsedMs}ms", results.Count, processingStopwatch.ElapsedMilliseconds);
+
+            // Set public habit properties
+            foreach (var habit in results)
+            {
+                habit.isOwnedHabit = false;
+                habit.CanManageProgress = false;
+            }
+
+            stopwatch.Stop();
+            _logger.LogInformation("GetPublicHabitsOptimized completed in {ElapsedMs}ms, returned {Count} habits", 
+                stopwatch.ElapsedMilliseconds, results.Count);
+
+            return results;
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+            _logger.LogError(ex, "GetPublicHabitsOptimized failed after {ElapsedMs}ms for user {UserId}", 
+                stopwatch.ElapsedMilliseconds, userId);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Helper method to process all habits (not just today's habits)
+    /// </summary>
+    private List<HabitWithProgressDTO> ProcessAllHabitsOptimized(
+        List<Habit> habits, 
+        Dictionary<Guid, List<HabitLog>> logsByHabit, 
+        DateTime today, 
+        Guid userId)
+    {
+        var results = new List<HabitWithProgressDTO>();
+
+        foreach (var habit in habits)
+        {
+            var habitLogs = logsByHabit.GetValueOrDefault(habit.Id.Value, new List<HabitLog>());
+            
+            var currentValue = GetCurrentProgressOptimized(habit.Id.Value, habit.Frequency, today, habitLogs);
+            var streak = CalculateStreakOptimized(habit, habitLogs, today);
+            var isCompleted = currentValue >= (habit.TargetValue ?? 1);
+
+            results.Add(new HabitWithProgressDTO
+            {
+                Id = habit.Id ?? Guid.Empty,
+                Name = habit.Name,
+                Description = habit.Description,
+                Frequency = habit.Frequency,
+                GoalType = habit.GoalType,
+                TargetValue = habit.TargetValue,
+                TargetType = habit.TargetType,
+                StreakTarget = habit.StreakTarget,
+                EndDate = habit.EndDate,
+                CurrentValue = currentValue,
+                Streak = streak,
+                IsCompleted = isCompleted,
+                UserId = habit.UserId,
+                UserName = habit.User?.UserName,
+                isOwnedHabit = habit.UserId == userId,
+                CanManageProgress = habit.UserId == userId,
+                CopyCount = habit.CopyCount
+            });
+        }
+
+        return results;
+    }
+
+    // OPTIMIZED ENDPOINTS - END
 }

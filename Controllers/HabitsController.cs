@@ -117,15 +117,55 @@ public class HabitsController : ControllerBase
     [HttpGet("active")]
     public async Task<ActionResult<IEnumerable<HabitWithProgressDTO>>> GetActiveHabits()
     {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var userId = GetUserId();
-        return await _habitService.GetAllHabits(userId, false);
+        
+        _logger.LogInformation("GetActiveHabits endpoint called for user {UserId}", userId);
+
+        try
+        {
+            var result = await _habitService.GetAllHabits(userId, false);
+            stopwatch.Stop();
+            
+            _logger.LogInformation("GetActiveHabits endpoint completed in {ElapsedMs}ms for user {UserId}, returned {Count} habits", 
+                stopwatch.ElapsedMilliseconds, userId, result.Count);
+            
+            return result;
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+            _logger.LogError(ex, "GetActiveHabits endpoint failed after {ElapsedMs}ms for user {UserId}", 
+                stopwatch.ElapsedMilliseconds, userId);
+            throw;
+        }
     }
 
     [HttpGet("archived")]
     public async Task<ActionResult<IEnumerable<HabitWithProgressDTO>>> GetArchivedHabits()
     {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var userId = GetUserId();
-        return await _habitService.GetAllHabits(userId, true);
+        
+        _logger.LogInformation("GetArchivedHabits endpoint called for user {UserId}", userId);
+
+        try
+        {
+            var result = await _habitService.GetAllHabits(userId, true);
+            stopwatch.Stop();
+            
+            _logger.LogInformation("GetArchivedHabits endpoint completed in {ElapsedMs}ms for user {UserId}, returned {Count} habits", 
+                stopwatch.ElapsedMilliseconds, userId, result.Count);
+            
+            return result;
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+            _logger.LogError(ex, "GetArchivedHabits endpoint failed after {ElapsedMs}ms for user {UserId}", 
+                stopwatch.ElapsedMilliseconds, userId);
+            throw;
+        }
     }
 
     [HttpPut("{id}")]
@@ -154,16 +194,55 @@ public class HabitsController : ControllerBase
     [HttpGet("friends")]
     public async Task<ActionResult<IEnumerable<HabitWithProgressDTO>>> GetFriendsHabits()
     {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var userId = GetUserId();
-        return await _habitService.GetFriendsHabits(userId);
+        
+        _logger.LogInformation("GetFriendsHabits endpoint called for user {UserId}", userId);
+
+        try
+        {
+            var result = await _habitService.GetFriendsHabits(userId);
+            stopwatch.Stop();
+            
+            _logger.LogInformation("GetFriendsHabits endpoint completed in {ElapsedMs}ms for user {UserId}, returned {Count} habits", 
+                stopwatch.ElapsedMilliseconds, userId, result.Count);
+            
+            return result;
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+            _logger.LogError(ex, "GetFriendsHabits endpoint failed after {ElapsedMs}ms for user {UserId}", 
+                stopwatch.ElapsedMilliseconds, userId);
+            throw;
+        }
     }
 
     [HttpGet("public")]
     public async Task<ActionResult<IEnumerable<HabitWithProgressDTO>>> GetPublicHabits([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
     {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var userId = GetUserId();
-        var habits = await _habitService.GetPublicHabits(userId, pageNumber, pageSize);
-        return Ok(habits);
+        
+        _logger.LogInformation("GetPublicHabits endpoint called for user {UserId}, page {PageNumber}, size {PageSize}", userId, pageNumber, pageSize);
+
+        try
+        {
+            var result = await _habitService.GetPublicHabits(userId, pageNumber, pageSize);
+            stopwatch.Stop();
+            
+            _logger.LogInformation("GetPublicHabits endpoint completed in {ElapsedMs}ms for user {UserId}, returned {Count} habits", 
+                stopwatch.ElapsedMilliseconds, userId, result.Count);
+            
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+            _logger.LogError(ex, "GetPublicHabits endpoint failed after {ElapsedMs}ms for user {UserId}", 
+                stopwatch.ElapsedMilliseconds, userId);
+            throw;
+        }
     }
 
     [HttpPost("{id}/copy")]
